@@ -1,0 +1,260 @@
+.Lector-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 0; /* ocupamos toda la pantalla */
+}
+
+/* panel en pantalla completa */
+.Lector-panel {
+  width: 100vw;
+  height: 100vh;
+  background: #f7f6f2;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0;
+}
+
+/* modifier (se puede mantener por compatibilidad) */
+.Lector-panel--fullscreen {
+  padding: 0; /* dejamos que header/footer ocupen su espacio */
+}
+
+/* header */
+.Lector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 1rem;
+  background: linear-gradient(180deg, #fffdf7, #f3efe6);
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  z-index: 10;
+}
+.Lector-title { font-weight: 700; color: #1b5e5a; }
+
+/* switch visual */
+.Switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+.Switch input { display: none; }
+.Slider-visual {
+  width: 42px;
+  height: 22px;
+  border-radius: 14px;
+  background: #dfecec;
+  position: relative;
+  transition: background 0.2s;
+}
+.Slider-visual::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  transition: transform 0.2s;
+}
+.Switch input:checked + .Slider-visual { background: #7fe4da; }
+.Switch input:checked + .Slider-visual::after { transform: translateX(20px); }
+.Switch-label { font-size: 0.9rem; color: #355e5b; }
+
+/* botones */
+.Btn-small {
+  background: #ffffff;
+  border: 1px solid #e6e6e6;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: #1b5e5a;
+}
+.Btn-small:hover { transform: translateY(-1px); }
+.Btn-close {
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+/* viewer: darle aspecto de página cuando sea single via tema, pero también un contenedor bonito */
+.Lector-viewer {
+  flex: 1;
+  background: linear-gradient(180deg, #fbfaf7, #f6f4f0);
+  margin: 0; /* quitar márgenes para fullscreen */
+  border-radius: 0;
+  overflow: hidden;
+  position: relative;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.02);
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* asegurar que epub inyectado ocupe todo; themes inyectados en epub se encargan de centrar contenido single */
+.Lector-viewer > .epubjs-container,
+.Lector-viewer iframe {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  background: transparent !important;
+  overflow: hidden !important;
+}
+
+/* Ayuda a evitar que el contenido interno empuje el layout fuera del iframe */
+.Lector-viewer > .epubjs-container iframe,
+.Lector-viewer > .epubjs-container .viewport {
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* regla segura dentro del iframe (algunas versiones necesitan esto para no romper columnas) */
+.Lector-viewer > .epubjs-container iframe body,
+.Lector-viewer > .epubjs-container iframe html {
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+}
+
+/* footer y slider (mantengo tu estilo bonito) */
+.Lector-footer {
+  padding: 0.6rem 1rem;
+  background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(245,244,241,0.9));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: stretch;
+  border-top: 1px solid rgba(0,0,0,0.04);
+}
+.Progress-info { display: flex; justify-content: space-between; color: #234c4a; font-weight: 600; }
+.Lector-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  background: linear-gradient(90deg, #7fe4da 0%, #aef3ef 100%);
+  border-radius: 20px;
+  outline: none;
+}
+.Lector-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border: 3px solid #3fbfb4;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  cursor: pointer;
+}
+
+/* loading */
+.Lector-loading { color: #2b6a66; font-weight: 600; }
+
+/* POPUP de ajustes (estilo inspirado en las imágenes, responsive) */
+.Settings-popover {
+  position: absolute;
+  top: 56px; /* debajo del header */
+  right: 12px;
+  width: min(360px, 92vw);
+  background: rgba(18,18,18,0.96);
+  color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+  overflow: hidden;
+  z-index: 99999;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* Tabs */
+.Settings-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.Settings-tabs .tab {
+  flex: 1;
+  padding: 10px 12px;
+  background: transparent;
+  color: #cbd5d5;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+.Settings-tabs .tab.active { color: #fff; border-bottom: 2px solid #5bd8cf; }
+
+/* Body */
+.Settings-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* sections */
+.Settings-section { display: flex; flex-direction: column; gap: 8px; }
+.section-title { font-size: 0.85rem; color: #cfe7e4; font-weight: 700; }
+
+/* fuente botones */
+.font-options { display:flex; gap:8px; }
+.font-btn {
+  background: rgba(255,255,255,0.04);
+  color: #e6f7f6;
+  border: 1px solid rgba(255,255,255,0.04);
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.font-btn.active { background: #fff; color: #0b4b49; border-color: #fff; }
+
+/* rango y value */
+.range-row { display:flex; gap:8px; align-items:center; }
+.range-row input[type="range"] { flex: 1; }
+.range-value { min-width:44px; text-align:center; color:#e6f7f6; font-weight:700; }
+
+/* temas (pequeños botones) */
+.theme-options { display:flex; gap:8px; align-items:center; margin-top:6px; }
+.theme-btn {
+  width:36px; height:28px; border-radius:6px; border:1px solid rgba(255,255,255,0.06);
+  cursor:pointer; background:#fff;
+}
+.theme-btn:nth-child(1) { background: #ffffff; } /* claro */
+.theme-btn:nth-child(2) { background: #f4ecd8; } /* sepia */
+.theme-btn:nth-child(3) { background: #0b0c0c; } /* oscuro */
+.theme-btn.active { outline: 3px solid rgba(91,216,207,0.18); transform: translateY(-2px); }
+
+/* toggle row */
+.toggle-row { display:flex; gap:10px; align-items:center; margin-top:6px; color:#d7f0ee; }
+.toggle-row input { width: 18px; height: 18px; }
+
+/* adaptaciones móviles */
+@media (max-width: 520px) {
+  .Settings-popover { right: 8px; left: 8px; top: 50px; width: auto; border-radius: 10px; }
+  .Settings-tabs .tab { padding: 8px 6px; font-size: 0.95rem; }
+  .Settings-body { padding: 10px; }
+}
+
+@media (max-width: 900px) {
+  .Lector-header { padding: 0.5rem; }
+  .Lector-footer { padding: 0.5rem; }
+}

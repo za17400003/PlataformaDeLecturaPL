@@ -1,0 +1,100 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f0f0f0;
+}
+
+h2 {
+  color: #333;
+  text-align: center;
+}
+
+.LectorCamara {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.VideoCamara {
+  width: 100%;
+  max-width: 600px;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+}
+
+.ErrorCamara {
+  color: red;
+  font-weight: bold;
+  text-align: center;
+}
+
+.FloatingRecBtn {
+  position: fixed;
+  right: 20px;        /* esquina inferior derecha */
+  bottom: 20px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #e74c3c; /* rojo */
+  color: #ffffff;      /* texto blanco */
+  border: 0;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+  z-index: 2147483647; /* muy alto para garantizar que está sobre todo */
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+/* estado grabando: verde con texto negro */
+.FloatingRecBtn.on {
+  background: #8fd46b;
+  color: #000;
+  box-shadow: 0 14px 34px rgba(143,212,107,0.35);
+}
+
+/* pequeño feedback táctil */
+.FloatingRecBtn:active { transform: scale(0.96); }
+
+/* si algún overlay captura clicks, forzamos que el botón esté arriba */
+body .App .FloatingRecBtn { position: fixed; }
+
+/* pequeña animación de pulso cuando activo - opcional */
+.FloatingRecBtn.on {
+  box-shadow: 0 10px 24px rgba(143,212,107,0.35);
+  transform: scale(1);
+}
+
+/* asegurar que el botón esté siempre en frente */
+.FloatingRecBtn {
+  position: fixed !important;
+  right: 20px;
+  bottom: 20px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #e74c3c;
+  color: #fff;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto !important;
+  z-index: 2147483647 !important; /* valor máximo seguro */
+  transform: translateZ(0);       /* promueve a capa propia */
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* estado grabando */
+.FloatingRecBtn.on {
+  background: #8fd46b;
+  color: #000;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+}

@@ -1,0 +1,170 @@
+import React, { useState, useEffect } from 'react';
+import './biblioteca.css';
+import ePub from 'epubjs';
+
+import nubeBlanca from './assets/nube.png';
+import nubeSoplonaIzq from './assets/nubesoplonaizq.png';
+import nubeSoplonaDer from './assets/nubesoplonader.png';
+import flechaIzq from './assets/flechaizq.png';
+import flechaDer from './assets/flechader.png';
+import Lector from './Lector'; // agregado: lector
+
+function Biblioteca() {
+  const [libros, setLibros] = useState([]);
+  const [portadas, setPortadas] = useState([]);
+  const [nubeActiva, setNubeActiva] = useState(null);
+  const [deslizarDireccion, setDeslizarDireccion] = useState(null);
+  const [paginaActual, setPaginaActual] = useState(0);
+  const [libroSeleccionado, setLibroSeleccionado] = useState(null); // agregado: libro abierto
+  const librosPorPagina = 6;
+
+  useEffect(() => {
+    fetch('http://localhost:3001/api/libros')
+      .then(res => res.json())
+      .then(data => setLibros(data))
+      .catch(err => console.error('Error al obtener libros:', err));
+  }, []);
+
+  useEffect(() => {
+    const cargarPortadasYTitulos = async () => {
+      const resultados = await Promise.all(
+        libros.map(async (libro) => {
+          try {
+            const epub = ePub(libro.archivo);
+            await epub.ready;
+
+            const tituloReal = epub.package?.metadata?.title || libro.titulo;
+            const coverUrl = await epub.loaded.cover;
+
+            let portada = null;
+            if (coverUrl) {
+              portada = await epub.archive.createUrl(coverUrl, { base64: true });
+            }
+
+            // agregado: incluir archivo para poder abrir en el lector
+            return { titulo: tituloReal, portada, archivo: libro.archivo };
+          } catch (error) {
+            console.error(`Error al cargar ${libro.archivo}:`, error);
+            return { titulo: libro.titulo, portada: null, archivo: libro.archivo };
+          }
+        })
+      );
+      setPortadas(resultados);
+    };
+
+    if (libros.length > 0) {
+      cargarPortadasYTitulos();
+    }
+  }, [libros]);
+
+  const librosVisibles = portadas.slice(
+    paginaActual * librosPorPagina,
+    (paginaActual + 1) * librosPorPagina
+  );
+
+  const activarAnimacion = (direccion) => {
+    setNubeActiva(direccion);
+    setTimeout(() => {
+      setNubeActiva(null);
+      setDeslizarDireccion(null);
+    }, 1200);
+  };
+
+  const avanzarPagina = () => {
+    if ((paginaActual + 1) * librosPorPagina < portadas.length) {
+      setDeslizarDireccion('derecha');
+      setNubeActiva('izquierda');
+
+      setTimeout(() => {
+        setPaginaActual(prev => prev + 1);
+        setNubeActiva(null);
+        setDeslizarDireccion(null);
+      }, 1200); // espera a que termine la animación
+    }
+  };
+
+  const retrocederPagina = () => {
+    if (paginaActual > 0) {
+      setDeslizarDireccion('izquierda');
+      setNubeActiva('derecha');
+
+      setTimeout(() => {
+        setPaginaActual(prev => prev - 1);
+        setNubeActiva(null);
+        setDeslizarDireccion(null);
+      }, 1200); // espera a que termine la animación
+    }
+  };
+
+  return (
+    <div className="Biblioteca fade-in">
+      <h2 className="Titulo-biblioteca">📚 Biblioteca</h2>
+
+      <div className="Contenedor-nubes">
+        {nubeActiva === 'izquierda' && (
+          <img
+            src={nubeSoplonaIzq}
+            alt="Nube soplando izquierda"
+            className="Nube-cian izquierda animar"
+          />
+        )}
+        {nubeActiva === 'derecha' && (
+          <img
+            src={nubeSoplonaDer}
+            alt="Nube soplando derecha"
+            className="Nube-cian derecha animar"
+          />
+        )}
+
+        <div className="Nubes-blancas" style={{ paddingBottom: '3rem' }}>
+        {librosVisibles.map((libro, index) => (
+          <div
+            key={index}
+            className={`Libro-nube ${deslizarDireccion === 'derecha' ? 'deslizar-derecha' : ''} ${deslizarDireccion === 'izquierda' ? 'deslizar-izquierda' : ''}`}
+            onClick={() => setLibroSeleccionado(libro.archivo)} // agregado: abrir lector al hacer click
+            style={{ cursor: 'pointer' }}
+          >
+            <div
+              className="Nube-blanca"
+              style={{ backgroundImage: `url(${nubeBlanca})` }}
+            >
+              {libro.portada ? (
+                <img
+                  src={libro.portada}
+                  alt={`Portada de ${libro.titulo}`}
+                  className="Portada"
+                />
+              ) : (
+                <div className="Error-libro">Sin portada</div>
+              )}
+            </div>
+            <h3 className="Titulo-libro">{libro.titulo}</h3>
+          </div>
+        ))}
+      </div>
+
+        <div className="Flechas-navegacion">
+          <img
+            src={flechaIzq}
+            alt="Flecha izquierda"
+            className="Flecha animable"
+            onClick={retrocederPagina}
+          />
+          <img
+            src={flechaDer}
+            alt="Flecha derecha"
+            className="Flecha animable"
+            onClick={avanzarPagina}
+          />
+        </div>
+      </div>
+
+      {/* agregado: Lector modal */}
+      {libroSeleccionado && (
+        <Lector archivo={libroSeleccionado} onClose={() => setLibroSeleccionado(null)} />
+      )}
+    </div>
+  );
+}
+
+export default Biblioteca;
