@@ -71,29 +71,25 @@ function Biblioteca() {
   };
 
   const avanzarPagina = () => {
-    if ((paginaActual + 1) * librosPorPagina < portadas.length) {
-      setDeslizarDireccion('derecha');
-      setNubeActiva('izquierda');
-
-      setTimeout(() => {
-        setPaginaActual(prev => prev + 1);
-        setNubeActiva(null);
-        setDeslizarDireccion(null);
-      }, 1200); // espera a que termine la animación
-    }
+    setDeslizarDireccion('derecha');
+    activarAnimacion('izquierda');
+    setTimeout(() => {
+      setPaginaActual(prev => {
+        const totalPaginas = Math.ceil(portadas.length / librosPorPagina);
+        return prev + 1 >= totalPaginas ? 0 : prev + 1;
+      });
+    }, 1200);
   };
 
   const retrocederPagina = () => {
-    if (paginaActual > 0) {
-      setDeslizarDireccion('izquierda');
-      setNubeActiva('derecha');
-
-      setTimeout(() => {
-        setPaginaActual(prev => prev - 1);
-        setNubeActiva(null);
-        setDeslizarDireccion(null);
-      }, 1200); // espera a que termine la animación
-    }
+    setDeslizarDireccion('izquierda');
+    activarAnimacion('derecha');
+    setTimeout(() => {
+      setPaginaActual(prev => {
+        const totalPaginas = Math.ceil(portadas.length / librosPorPagina);
+        return prev - 1 < 0 ? totalPaginas - 1 : prev - 1;
+      });
+    }, 1200);
   };
 
   return (
@@ -116,45 +112,59 @@ function Biblioteca() {
           />
         )}
 
-        <div className="Nubes-blancas" style={{ paddingBottom: '3rem' }}>
-        {librosVisibles.map((libro, index) => (
-          <div
-            key={index}
-            className={`Libro-nube ${deslizarDireccion === 'derecha' ? 'deslizar-derecha' : ''} ${deslizarDireccion === 'izquierda' ? 'deslizar-izquierda' : ''}`}
-            onClick={() => setLibroSeleccionado(libro.archivo)} // agregado: abrir lector al hacer click
-            style={{ cursor: 'pointer' }}
-          >
-            <div
-              className="Nube-blanca"
-              style={{ backgroundImage: `url(${nubeBlanca})` }}
-            >
-              {libro.portada ? (
-                <img
-                  src={libro.portada}
-                  alt={`Portada de ${libro.titulo}`}
-                  className="Portada"
-                />
-              ) : (
-                <div className="Error-libro">Sin portada</div>
-              )}
-            </div>
-            <h3 className="Titulo-libro">{libro.titulo}</h3>
-          </div>
-        ))}
-      </div>
+        <div className="Nubes-blancas">
+          {/* Skeleton placeholders (same DOM structure que las nubes reales) */}
+          {portadas.length === 0 && libros.length > 0 && (
+            Array.from({ length: librosPorPagina }).map((_, i) => (
+              <div key={`sk-${i}`} className="Libro-nube" style={{ cursor: 'default', '--float-duration': '4s', '--float-delay': '0s' }}>
+                <div className="Nube-blanca Skeleton-card" />
+                <div className="Skeleton-title" />
+              </div>
+            ))
+          )}
+
+          {portadas.length > 0 && librosVisibles.map((libro, index) => {
+            const duration = 4 + (index % 3);
+            const delay = (index % 3) * 0.15;
+            return (
+              <div
+                key={index}
+                className={`Libro-nube ${deslizarDireccion === 'derecha' ? 'deslizar-derecha' : ''} ${deslizarDireccion === 'izquierda' ? 'deslizar-izquierda' : ''}`}
+                onClick={() => setLibroSeleccionado(libro.archivo)}
+                style={{ cursor: 'pointer', '--float-duration': `${duration}s`, '--float-delay': `${delay}s` }}
+              >
+                <div
+                  className="Nube-blanca"
+                  style={{ backgroundImage: `url(${nubeBlanca})` }}
+                >
+                  {libro.portada ? (
+                    <img
+                      src={libro.portada}
+                      alt={`Portada de ${libro.titulo}`}
+                      className="Portada"
+                    />
+                  ) : (
+                    <div className="Error-libro">Sin portada</div>
+                  )}
+                </div>
+                <h3 className="Titulo-libro">{libro.titulo}</h3>
+              </div>
+            );
+          })}
+        </div>
 
         <div className="Flechas-navegacion">
           <img
             src={flechaIzq}
             alt="Flecha izquierda"
             className="Flecha animable"
-            onClick={retrocederPagina}
+            onClick={avanzarPagina}
           />
           <img
             src={flechaDer}
             alt="Flecha derecha"
             className="Flecha animable"
-            onClick={avanzarPagina}
+            onClick={retrocederPagina}
           />
         </div>
       </div>
