@@ -14,19 +14,69 @@ export default function Lector(props) {
   const [ready, setReady] = useState(false);
   const [totalLocations, setTotalLocations] = useState(0);
 
+  // flechas laterales dentro del lector: visibilidad y timeout de ocultado
+  const [showPageArrows, setShowPageArrows] = useState(false);
+  const hideArrowsTimerRef = useRef(null);
+
+  const triggerShowPageArrows = useCallback(() => {
+    setShowPageArrows(true);
+    if (hideArrowsTimerRef.current) {
+      clearTimeout(hideArrowsTimerRef.current);
+    }
+    hideArrowsTimerRef.current = setTimeout(() => {
+      setShowPageArrows(false);
+      hideArrowsTimerRef.current = null;
+    }, 3000);
+  }, []);
+
   // --- POPUP: estado y preferencias mínimas ---
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState('texto'); // 'texto' | 'iluminacion'
-  const [prefs, setPrefs] = useState({
-    font: 'original', // 'original' | 'sans' | 'merri'
-    fontSize: 100, // %
-    lineHeight: 1.45, // number
-    theme: 'light', // 'light'|'sepia'|'dark'
-    brightness: 1.0
+  // Cargar preferencias guardadas o usar valores por defecto
+  const [prefs, setPrefs] = useState(() => {
+    const savedPrefs = localStorage.getItem('readerPrefs');
+    return savedPrefs ? JSON.parse(savedPrefs) : {
+      font: 'original',
+      fontSize: 100,
+      lineHeight: 1.45,
+      theme: 'light',
+      brightness: 1.0
+    };
   });
 
-  const updatePref = (patch) => setPrefs(prev => ({ ...prev, ...patch }));
+  const updatePref = (patch) => {
+    const newPrefs = { ...prefs, ...patch };
+    setPrefs(newPrefs);
+    localStorage.setItem('readerPrefs', JSON.stringify(newPrefs));
+    applyPrefsToAll(newPrefs);
+  };
   const toggleSettings = () => setShowSettings(v => !v);
+
+  // Aplica las preferencias a todas las secciones del libro
+  const applyPrefsToAll = (newPrefs) => {
+    const rendition = renditionRef.current;
+    if (!rendition) return;
+    
+    // Aplicar a la sección actual y contenedor
+    applyPrefsToRendition(rendition, newPrefs);
+    if (viewerRef.current) {
+      viewerRef.current.style.filter = `brightness(${newPrefs.brightness})`;
+    }
+    
+    // Aplicar a todas las secciones cargadas
+    try {
+      const css = buildPrefsCss(newPrefs);
+      rendition.getContents().forEach(content => {
+        if (content.document && content.document.body) {
+          const style = content.document.createElement('style');
+          style.innerHTML = css;
+          content.document.head.appendChild(style);
+        }
+      });
+    } catch (e) {
+      console.warn('Error applying prefs to all sections:', e);
+    }
+  };
 
   // crea CSS con mayor especificidad para vencer estilos internos
   const buildPrefsCss = (p) => {
@@ -259,6 +309,16 @@ export default function Lector(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [archivo]);
 
+  // limpiar timer de flechas al desmontar
+  useEffect(() => {
+    return () => {
+      if (hideArrowsTimerRef.current) {
+        clearTimeout(hideArrowsTimerRef.current);
+        hideArrowsTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // cambiar entre 1 y 2 páginas usando tema (column-count)
   useEffect(() => {
     const rendition = renditionRef.current;
@@ -349,14 +409,66 @@ export default function Lector(props) {
               <span className="Switch-label">{isTwoPages ? '2 páginas' : '1 página'}</span>
             </label>
 
-            <button className="Btn-small" onClick={goPrev} title="Anterior">◀</button>
-            <button className="Btn-small" onClick={goNext} title="Siguiente">▶</button>
-            <button className="Btn-small" onClick={goToStart} title="Inicio">⤺</button>
+            <button 
+              className="HeaderBtn" 
+              onClick={goToStart} 
+              title="Inicio"
+              style={{
+                width: '42px',
+                height: '42px',
+                background: '#ffffff',
+                border: '1px solid #e6e6e6',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '1.2rem',
+                color: '#1b5e5a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+              }}
+            >⤺</button>
 
             {/* botón de ajustes que abre popup */}
-            <button className="Btn-small" onClick={(e) => { e.stopPropagation(); toggleSettings(); }} title="Ajustes">A</button>
+            <button 
+              className="HeaderBtn" 
+              onClick={(e) => { e.stopPropagation(); toggleSettings(); }} 
+              title="Ajustes"
+              style={{
+                width: '42px',
+                height: '42px',
+                background: '#ffffff',
+                border: '1px solid #e6e6e6',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '1.2rem',
+                color: '#1b5e5a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+              }}
+            >A</button>
 
-            <button className="Btn-close" onClick={onClose} title="Cerrar">✕</button>
+            <button 
+              className="HeaderBtn close" 
+              onClick={onClose} 
+              title="Cerrar"
+              style={{
+                width: '42px',
+                height: '42px',
+                background: '#ff4757',
+                border: '1px solid #ff6b6b',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '1.2rem',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+              }}
+            >✕</button>
           </div>
 
           {/* POPUP: ajustes de lectura */}
@@ -425,15 +537,89 @@ export default function Lector(props) {
           )}
         </header>
 
-        <main className="Lector-viewer" ref={viewerRef} style={{ filter: `brightness(${prefs.brightness})` }}>
+        <main
+          className="Lector-viewer"
+          ref={viewerRef}
+          style={{ filter: `brightness(${prefs.brightness})` }}
+          onMouseMove={(e) => { e.stopPropagation(); triggerShowPageArrows(); }}
+          onMouseEnter={(e) => { e.stopPropagation(); triggerShowPageArrows(); }}
+          onMouseLeave={(e) => {
+            // iniciar timeout (triggerShowPageArrows ya inicia/renueva), aquí solo dejar que expire
+            if (hideArrowsTimerRef.current) {
+              clearTimeout(hideArrowsTimerRef.current);
+            }
+            hideArrowsTimerRef.current = setTimeout(() => {
+              setShowPageArrows(false);
+              hideArrowsTimerRef.current = null;
+            }, 3000);
+          }}
+        >
           {!ready && <div className="Lector-loading">Cargando libro…</div>}
           {/* epub.js renderiza aquí */}
+
+          {/* Flechas laterales dentro del área de lectura */}
+          <button 
+            className={`NavArrow left ${showPageArrows ? 'visible' : ''}`}
+            onClick={(e) => { e.stopPropagation(); goPrev(); triggerShowPageArrows(); }}
+            style={{
+              position: 'absolute',
+              left: '20px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              opacity: showPageArrows ? 1 : 0,
+              visibility: showPageArrows ? 'visible' : 'hidden',
+              transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+              pointerEvents: showPageArrows ? 'auto' : 'none',
+              zIndex: 50,
+              width: '56px',
+              height: '56px',
+              background: '#ffffff',
+              border: '1px solid #e6e6e6',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '1.2rem',
+              color: '#1b5e5a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            ◀
+          </button>
+
+          <button
+            className={`NavArrow right ${showPageArrows ? 'visible' : ''}`}
+            onClick={(e) => { e.stopPropagation(); goNext(); triggerShowPageArrows(); }}
+            style={{
+              position: 'absolute',
+              right: '20px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              opacity: showPageArrows ? 1 : 0,
+              visibility: showPageArrows ? 'visible' : 'hidden',
+              transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+              pointerEvents: showPageArrows ? 'auto' : 'none',
+              zIndex: 50,
+              width: '56px',
+              height: '56px',
+              background: '#ffffff',
+              border: '1px solid #e6e6e6',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '1.2rem',
+              color: '#1b5e5a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            ▶
+          </button>
         </main>
 
         <footer className="Lector-footer">
           <div className="Progress-info">
-            <span>{progress}%</span>
-            <span className="Locations-info">{totalLocations ? ` · ${totalLocations} locs` : ''}</span>
+            <span>Página {Math.ceil((progress / 100) * (totalLocations * (prefs.fontSize / 100)))} de {Math.ceil(totalLocations * (prefs.fontSize / 100))}</span>
           </div>
           <input
             type="range"
