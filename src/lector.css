@@ -46,6 +46,101 @@
   gap: 1rem;
 }
 
+/* Navegación */
+.NavArrows {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+  padding: 0 1.5rem;
+  z-index: 10;
+}
+
+.NavArrow {
+  width: 48px;
+  height: 48px;
+  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  pointer-events: auto;
+  opacity: 0;
+  transform: scale(1);
+  transition: opacity 0.3s ease, transform 0.2s ease, background-color 0.2s ease;
+}
+
+.NavArrow.visible {
+  opacity: 1;
+}
+
+.NavArrow:hover {
+  background: rgba(0, 0, 0, 0.7);
+  transform: scale(1.15);
+}
+
+.NavArrow:active {
+  transform: scale(0.9);
+}
+
+.NavArrow.left {
+  padding-right: 2px;
+}
+
+.NavArrow.right {
+  padding-left: 2px;
+}
+
+.Lector-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: #ddd;
+  outline: none;
+  margin: 0;
+}
+
+.Lector-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #1b5e5a;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.Lector-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: #1b5e5a;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.Lector-slider::-webkit-slider-thumb:hover,
+.Lector-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+}
+
+.Lector-slider::-webkit-slider-thumb:active,
+.Lector-slider::-moz-range-thumb:active {
+  transform: scale(0.9);
+}
+
 /* switch visual */
 .Switch {
   display: inline-flex;
@@ -82,19 +177,22 @@
 /* botones */
 .NavArrow {
   transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+  opacity: 0;
+  transform: scale(0.8);
 }
 
 .NavArrow:hover {
-  transform: translateY(-50%) scale(1.1) !important;
+  transform: scale(1.1) !important;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
 .NavArrow:active {
-  transform: translateY(-50%) scale(0.95) !important;
+  transform: scale(0.95) !important;
 }
 
 .NavArrow.visible {
-  animation: bounceIn 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  opacity: 1;
+  transform: scale(1);
 }
 
 .HeaderBtn {

@@ -14,8 +14,7 @@ export default function Lector(props) {
   const viewerRef = useRef(null);
   const bookRef = useRef(null);
   const renditionRef = useRef(null);
-  const iframeObserverRef = useRef(null);
-  const resizeTimeoutRef = useRef(null);
+  const mountedRef = useRef(true);
 
   // Estados generales del lector
   const [isTwoPages, setIsTwoPages] = useState(false);
@@ -33,11 +32,28 @@ export default function Lector(props) {
   
   // Referencias para control de estado
   const locationsReadyRef = useRef(false);
-  const totalLocationsRef = useRef(0);
   const progressRef = useRef(0);
   const hideArrowsTimerRef = useRef(null);
   const videoPreviewRef = useRef(null);
-  const mountedRef = useRef(true);
+  const mediaRecorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const chunksRef = useRef([]);
+
+  // Preference hooks y estado
+  const buildPrefsCss = useBuildPrefsCss();
+  const injectCssIntoContents = useInjectCssIntoContents(DEBUG);
+  const applyPrefsToRendition = useApplyPrefsToRendition(buildPrefsCss, injectCssIntoContents, DEBUG);
+
+  const [prefs, setPrefs] = useState(() => {
+    const savedPrefs = localStorage.getItem('readerPrefs');
+    return savedPrefs ? JSON.parse(savedPrefs) : {
+      font: 'original',
+      fontSize: 100,
+      lineHeight: 1.45,
+      theme: 'light',
+      brightness: 1.0
+    };
+  });
 
   // Función para actualizar el progreso desde la ubicación actual
   const updateProgressFromRendition = useCallback(async (locObj) => {
@@ -68,346 +84,66 @@ export default function Lector(props) {
     }
   }, [DEBUG, setProgress, setTotalLocations]);
 
-  // Sistema de navegación (inicializado después de definir updateProgressFromRendition)
+  // Sistema de navegación
   const { goNext, goPrev, goToLocation } = useNavigation(
     renditionRef,
     bookRef,
     DEBUG,
     updateProgressFromRendition
   );
-  
-  /* Sistema original de resize (comentado temporalmente)
+
+  // eslint-disable-next-line no-unused-vars
   const handleResize = useCallback((renditionArg) => {
     const rendition = renditionArg || renditionRef.current;
     if (!rendition?.manager?.container || !mountedRef.current) return;
 
-    // Usar requestAnimationFrame para sincronizar con el repaint del navegador
-    if (!resizePendingRef.current) {
-      resizePendingRef.current = true;
-      requestAnimationFrame(() => {
-        if (!mountedRef.current) return;
-        
-        try {
-          rendition.resize();
-          if (DEBUG) console.debug('[reader] resize applied');
-        } catch (e) {
-          if (DEBUG) console.warn('[reader] resize error:', e);
-        }
-        
-        resizePendingRef.current = false;
-      });
-    }
-  }, [DEBUG]); */
-  
-  // Sistema simplificado de resize
-  const handleResize = useCallback((renditionArg) => {
-    const rendition = renditionArg || renditionRef.current;
-    if (!rendition?.manager?.container) return;
-
-    // Aplicar resize inmediatamente
-    try {
-      rendition.resize();
-      if (DEBUG) console.debug('[reader] resize applied');
-    } catch (e) {
-      if (DEBUG) console.warn('[reader] resize error:', e);
-    }
-  }, [DEBUG]);
-
-  /* Sistema original de safeRenditionResize (comentado temporalmente)
-  const safeRenditionResize = useCallback(async (renditionArg) => {
-    const rendition = renditionArg || renditionRef.current;
-    if (!rendition || !rendition.manager?.container) return;
-
-    // Limitar frecuencia a máximo 1 cada 200ms
-    const now = Date.now();
-    if (now - lastResizeTimeRef.current < 200) {
-      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
-      resizeTimeoutRef.current = setTimeout(() => handleResize(rendition), 200);
-      return;
-    }
-
-    lastResizeTimeRef.current = now;
-    
-    safeResizeInProgressRef.current = true;
-    lastResizeTimeRef.current = now;
-
-    try {
-      // Dar tiempo al DOM para actualizarse
-      await new Promise(res => setTimeout(res, 50));
-      
-      if (!mountedRef.current || !rendition.manager?.container) return;
-
-      if (typeof rendition.resize === 'function') {
-        rendition.resize();
-        if (DEBUG) console.debug('[reader] resize completed');
-      }
-    } catch (e) {
-      if (DEBUG) console.warn('[reader] resize error:', e);
-    } finally {
-      safeResizeInProgressRef.current = false;
-      resizeDebounceRef.current = null;
-    }
-  }, [DEBUG]); */
-  
-  // Sistema simplificado de safeRenditionResize
-  const safeRenditionResize = useCallback(async (renditionArg) => {
-    const rendition = renditionArg || renditionRef.current;
-    if (!rendition?.manager?.container) return;
-    
-    try {
-      rendition.resize();
-    } catch (e) {
-      if (DEBUG) console.warn('[reader] resize error:', e);
-    }
-  }, [DEBUG]);
-
-  // Variables de estado y refs ya declarados al inicio del componente
-  const mediaRecorderRef = useRef(null);
-  const streamRef = useRef(null);
-  const chunksRef = useRef([]);
-
-  // start/stop recorder (embedded). Uploads to '/upload' like the camera app.
-  const startRecording = async () => {
-    if (isRecording) return;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      streamRef.current = stream;
-      if (videoPreviewRef.current) videoPreviewRef.current.srcObject = stream;
-
-      // choose best mimeType
-      const options = (() => {
-        if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) return { mimeType: 'video/webm;codecs=vp9' };
-        if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) return { mimeType: 'video/webm;codecs=vp8' };
-        return { mimeType: 'video/webm' };
-      })();
-
-      const mr = new MediaRecorder(stream, options);
-      mediaRecorderRef.current = mr;
-      chunksRef.current = [];
-
-      mr.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      mr.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: chunksRef.current[0]?.type || 'video/webm' });
-        chunksRef.current = [];
-        // try uploading, fallback to download
-        try {
-          const fd = new FormData();
-          const filename = `recording-${Date.now()}.webm`;
-          fd.append('file', blob, filename);
-          await fetch('http://localhost:3001/upload', { 
-            method: 'POST', 
-            body: fd,
-            // Permitir CORS
-            mode: 'cors'
-          });
-          if (DEBUG) console.debug('[reader] upload successful');
-        } catch (err) {
-          if (DEBUG) console.warn('[reader] upload failed, creating local download', err);
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = `recording-${Date.now()}.webm`; document.body.appendChild(a); a.click(); a.remove();
-        }
-        try { if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; } } catch (e) {}
-      };
-
-      mr.start(1000);
-      setIsRecording(true);
-      if (DEBUG) console.debug('[reader] recording started');
-    } catch (e) {
-      console.error('No se pudo acceder a la cámara/micrófono:', e);
-      if (DEBUG) console.warn('[reader] startRecording error:', e);
-    }
-  };
-
-  const stopRecording = () => {
-    const mr = mediaRecorderRef.current;
-    if (!mr) return;
-    try {
-      if (mr.state !== 'inactive') mr.stop();
-    } catch (e) { if (DEBUG) console.warn('[reader] stopRecording error:', e); }
-    setIsRecording(false);
-    try { if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; } } catch (e) {}
-    if (DEBUG) console.debug('[reader] recording stopped');
-  };
-
-  // cleanup on unmount
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      try { if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop(); } catch (e) {}
-      try { if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; } } catch (e) {}
-    };
-  }, []);
-
-  // Simple window resize handler
-  useEffect(() => {
-    if (!renditionRef.current) return;
-    
-    const onResize = () => handleResize(renditionRef.current);
-    const timeoutRef = resizeTimeoutRef.current;
-    window.addEventListener('resize', onResize);
-    
-    return () => {
-      window.removeEventListener('resize', onResize);
-      if (timeoutRef) {
-        clearTimeout(timeoutRef);
-      }
-    };
-  }, [DEBUG, handleResize, mountedRef]);
-
-  // Suppress repeated ResizeObserver loop errors (use capture so we run early)
-  /* useEffect(() => {
-    const matchResizeMsg = (text) => {
-      if (typeof text !== 'string') return false;
-      return text.includes('ResizeObserver loop') || 
-             text.includes('ResizeObserver loop completed with undelivered notifications') ||
-             text.includes('ResizeObserver loop limit exceeded');
-    };
-
-    const onError = (ev) => {
-      try {
-        const msg = ev && (ev.message || (ev.error && ev.error.message)) ? (ev.message || ev.error.message).toString() : '';
-        if (matchResizeMsg(msg)) {
-          if (DEBUG) console.debug('[reader] suppressed ResizeObserver loop error (error)');
-          try { ev.preventDefault && ev.preventDefault(); } catch (e) {}
-          try { ev.stopImmediatePropagation && ev.stopImmediatePropagation(); } catch (e) {}
-        }
-      } catch (e) {}
-    };
-
-    const onRejection = (ev) => {
-      try {
-        const reason = ev && ev.reason;
-        const msg = reason && (reason.message || reason.toString()) ? (reason.message || reason.toString()) : '';
-        if (matchResizeMsg(msg)) {
-          if (DEBUG) console.debug('[reader] suppressed ResizeObserver loop error (unhandledrejection)');
-          try { ev.preventDefault && ev.preventDefault(); } catch (e) {}
-          try { ev.stopImmediatePropagation && ev.stopImmediatePropagation(); } catch (e) {}
-        }
-      } catch (e) {}
-    };
-
-    window.addEventListener('error', onError, true);
-    window.addEventListener('unhandledrejection', onRejection, true);
-    return () => {
-      window.removeEventListener('error', onError, true);
-      window.removeEventListener('unhandledrejection', onRejection, true);
-    };
-  }, [DEBUG]); */
-
-  // Cargar preferencias guardadas o usar valores por defecto
-  const [prefs, setPrefs] = useState(() => {
-    const savedPrefs = localStorage.getItem('readerPrefs');
-    return savedPrefs ? JSON.parse(savedPrefs) : {
-      font: 'original',
-      fontSize: 100,
-      lineHeight: 1.45,
-      theme: 'light',
-      brightness: 1.0
-    };
-  });
-
-  // Variables de estado y refs ya declarados al inicio del componente
-
-  // Set mounted to false on unmount
-  useEffect(() => {
-    return () => {
-    };
-  }, []);
-
-  const triggerShowPageArrows = useCallback(() => {
-    setShowPageArrows(true);
-    if (hideArrowsTimerRef.current) {
-      clearTimeout(hideArrowsTimerRef.current);
-    }
-    hideArrowsTimerRef.current = setTimeout(() => {
-      setShowPageArrows(false);
-      hideArrowsTimerRef.current = null;
-    }, 3000);
-  }, []);
-
-  // Preference hooks imported from usePreferences.js
-  const buildPrefsCss = useBuildPrefsCss();
-  const injectCssIntoContents = useInjectCssIntoContents(DEBUG);
-  const applyPrefsToRendition = useApplyPrefsToRendition(buildPrefsCss, injectCssIntoContents, DEBUG);
-
-
-
-  // keep refs synced with state for use by imperative functions
-  useEffect(() => { totalLocationsRef.current = totalLocations; }, [totalLocations]);
-  useEffect(() => { progressRef.current = progress; }, [progress]);
-
-  // Utility functions for preferences
-
-
-
-
-
-
-  // --- POPUP: estado y preferencias mínimas ---
-  // Variables de estado ya declaradas al inicio del componente
-
-  // Aplica las preferencias a todas las secciones del libro con debounce
-  const applyPrefsToAll = useCallback((newPrefs) => {
-    const rendition = renditionRef.current;
-    if (!rendition) return;
-    
-    // Aplicar a la sección actual y contenedor
     requestAnimationFrame(() => {
-      try {
-        applyPrefsToRendition(rendition, newPrefs);
-        if (viewerRef.current) {
-          viewerRef.current.style.filter = `brightness(${newPrefs.brightness})`;
-        }
+      if (!mountedRef.current) return;
       
-        // Aplicar a todas las secciones cargadas (delegate to hook which de-duplicates and batches)
-        const css = buildPrefsCss(newPrefs);
-        try {
-          injectCssIntoContents(rendition, css);
-        } catch (e) {
-          if (DEBUG) console.warn('[reader] injectCssIntoContents failed in applyPrefsToAll', e);
-        }
+      try {
+        rendition.resize();
+        if (DEBUG) console.debug('[reader] resize applied');
+        
+        // Re-aplicar preferencias después del resize
+        applyPrefsToRendition(rendition, prefs);
       } catch (e) {
-        if (DEBUG) console.warn('[reader] Error in applyPrefsToAll:', e);
+        if (DEBUG) console.warn('[reader] resize error:', e);
       }
     });
+  }, [DEBUG, prefs, applyPrefsToRendition]);
 
-    // Guardar preferencias
-    localStorage.setItem('readerPrefs', JSON.stringify(newPrefs));
-    // Aplicar tema también al contenedor del lector (UI fuera de iframes)
+  // Handler de resize seguro con debounce
+  const safeRenditionResize = useCallback(async (renditionArg) => {
+    const rendition = renditionArg || renditionRef.current;
+    if (!rendition?.manager?.container) return;
+    
     try {
-      const panel = viewerRef.current && viewerRef.current.closest && viewerRef.current.closest('.Lector-panel');
-      if (panel) {
-        // usar los mismos colores que buildPrefsCss
-        const bg = newPrefs.theme === 'dark' ? '#0b0c0c' : newPrefs.theme === 'sepia' ? '#f4ecd8' : '#ffffff';
-        const color = newPrefs.theme === 'dark' ? '#e8f6f5' : '#222222';
-        panel.style.background = bg;
-        panel.style.color = color;
-      }
-      const overlay = viewerRef.current && viewerRef.current.closest && viewerRef.current.closest('.Lector-overlay');
-      if (overlay) {
-        // slightly dim overlay in dark mode for full-window effect
-        overlay.style.background = newPrefs.theme === 'dark' ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)';
+      await new Promise(resolve => setTimeout(resolve, 50)); // dar tiempo al DOM
+      if (mountedRef.current) {
+        rendition.resize();
       }
     } catch (e) {
-      // ignore
+      if (DEBUG) console.warn('[reader] resize error:', e);
     }
-  }, [applyPrefsToRendition, buildPrefsCss, injectCssIntoContents, DEBUG]);
-
-  // Actualiza y guarda las preferencias
-  const updatePref = useCallback((patch) => {
-    const newPrefs = { ...prefs, ...patch };
-    setPrefs(newPrefs);
-    applyPrefsToAll(newPrefs);
-  }, [prefs, applyPrefsToAll]);
-  
-  const toggleSettings = () => setShowSettings(v => !v);
+  }, [DEBUG]);
 
 
+
+  // Función para actualizar preferencias
+  const updatePref = useCallback((newPref) => {
+    setPrefs(prev => {
+      const updated = { ...prev, ...newPref };
+      localStorage.setItem('readerPrefs', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  // Función para aplicar preferencias a todos los elementos
+  const applyPrefsToAll = useCallback((prefs) => {
+    const rendition = renditionRef.current;
+    if (!rendition) return;
+    applyPrefsToRendition(rendition, prefs);
+  }, [applyPrefsToRendition]);
 
   // Handlers que actualizan estado y aplican inmediatamente
   const handleFontChange = useCallback((font) => {
@@ -436,16 +172,9 @@ export default function Lector(props) {
     applyPrefsToAll(prefs);
   }, [prefs, applyPrefsToAll]);
 
-  // Observador que fuerza allow-scripts / allow-same-origin en iframes tan pronto se agregan
-  const startIframeObserver = useCallback(() => {
-    // Temporarily disabled to test ResizeObserver issues
-    return () => {};
-  }, []);
-
+  // Inicialización y cleanup
   useEffect(() => {
-    if (!archivo) {
-      return;
-    }
+    if (!archivo) return;
 
     let cleanup = () => {};
 
@@ -461,9 +190,18 @@ export default function Lector(props) {
         height: '100%',
         flow: 'paginated',
         spread: 'none',
-        minSpreadWidth: 1000,
+        minSpreadWidth: 800,
         manager: 'default',
-        fullsize: true
+        fullsize: true,
+        stylesheet: `
+          body { 
+            margin: 0 auto !important;
+            padding: 2rem !important;
+            max-width: 800px !important;
+            font-size: initial !important;
+            line-height: initial !important;
+          }
+        `
       };
 
       const rendition = book.renderTo(viewerRef.current, renderOptions);
@@ -480,19 +218,27 @@ export default function Lector(props) {
             'padding': '0 !important'
           }
         });
+
+        // Asegurarnos de que displayOptions esté inicializado
+        if (!rendition.displayOptions) {
+          rendition.displayOptions = {
+            width: '100%',
+            height: '100%',
+            flow: 'paginated',
+            spread: 'none'
+          };
+        }
+
+        // Inicializar navigation si es necesario
+        if (!rendition.navigation) {
+          rendition.navigation = {};
+        }
       } catch (e) {
         if (DEBUG) console.warn('[reader] failed to set default theme:', e);
       }
 
       bookRef.current = book;
       renditionRef.current = rendition;
-
-      // Set up observers and handlers
-      try {
-        iframeObserverRef.current = startIframeObserver();
-      } catch (e) {
-        if (DEBUG) console.warn('[reader] observer init error:', e);
-      }
 
       // Event handlers
       const onRelocated = loc => {
@@ -526,13 +272,11 @@ export default function Lector(props) {
       cleanup = () => {
         try { rendition.off('relocated', onRelocated); } catch (e) {}
         try { rendition.off('rendered', onRendered); } catch (e) {}
-        try { iframeObserverRef.current?.disconnect(); } catch (e) {}
         try { rendition.destroy(); } catch (e) {}
         try { book.destroy(); } catch (e) {}
         
         bookRef.current = null;
         renditionRef.current = null;
-        iframeObserverRef.current = null;
       };
     }
 
@@ -546,7 +290,7 @@ export default function Lector(props) {
         if (DEBUG) console.warn('[reader] cleanup error:', e);
       }
     };
-  }, [archivo, DEBUG, prefs, startIframeObserver, applyPrefsToRendition, updateProgressFromRendition]);
+  }, [archivo, DEBUG, prefs, applyPrefsToRendition, updateProgressFromRendition]);
 
   // limpiar timer de flechas al desmontar
   useEffect(() => {
@@ -640,7 +384,92 @@ export default function Lector(props) {
     return () => { alive = false; };
   }, [prefs.fontSize, prefs.lineHeight, isTwoPages, updateProgressFromRendition]);
 
+  // Gestión de flechas de navegación
+  const triggerShowPageArrows = useCallback(() => {
+    setShowPageArrows(true);
+    if (hideArrowsTimerRef.current) {
+      clearTimeout(hideArrowsTimerRef.current);
+    }
+    hideArrowsTimerRef.current = setTimeout(() => {
+      setShowPageArrows(false);
+    }, 2000);
+  }, []);
 
+  const hidePageArrows = useCallback(() => {
+    setShowPageArrows(false);
+    if (hideArrowsTimerRef.current) {
+      clearTimeout(hideArrowsTimerRef.current);
+      hideArrowsTimerRef.current = null;
+    }
+  }, []);
+
+  // Toggle settings panel
+  const toggleSettings = useCallback(() => {
+    setShowSettings(prev => !prev);
+  }, []);
+
+  // Recording functions
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      streamRef.current = stream;
+      
+      if (videoPreviewRef.current) {
+        videoPreviewRef.current.srcObject = stream;
+        videoPreviewRef.current.style.display = 'block';
+      }
+
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        document.body.appendChild(a);
+        a.style.display = 'none';
+        a.href = url;
+        a.download = 'recording.webm';
+        a.click();
+        window.URL.revokeObjectURL(url);
+        chunksRef.current = [];
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+    }
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    const mediaRecorder = mediaRecorderRef.current;
+    const stream = streamRef.current;
+
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+
+    if (videoPreviewRef.current) {
+      videoPreviewRef.current.srcObject = null;
+      videoPreviewRef.current.style.display = 'none';
+    }
+
+    setIsRecording(false);
+    mediaRecorderRef.current = null;
+    streamRef.current = null;
+  }, []);
 
   // goToStart utiliza hook de navegación
   const goToStart = useCallback(() => {
@@ -650,36 +479,20 @@ export default function Lector(props) {
   }, [goToLocation]);
 
   const onPageSliderChange = useCallback((e) => {
-    const page = Number(e.target.value); // 1..totalPages
+    if (showSettings) return;
+    const page = Number(e.target.value);
     const book = bookRef.current;
-    const r = renditionRef.current;
-    if (!book || !r || !book.locations) return;
-
-    const navigateToPage = async () => {
-      try {
-        if (!locationsReadyRef.current) {
-          if (DEBUG) console.debug('[reader] onPageSliderChange: generating locations');
-          await book.locations.generate(300);
-          locationsReadyRef.current = true;
-          setTotalLocations(book.locations.length());
-        }
-
-        const total = book.locations.length() || 1;
-        const frac = Math.max(0, Math.min(0.999999, (page - 0.5) / total));
-        const cfi = book.locations.cfiFromPercentage(frac);
-        const pct = frac * 100;
-        
-        if (DEBUG) console.debug('[reader] onPageSliderChange:', { page, frac, cfi, total });
-        setProgress(Number(pct.toFixed(2)));
-        
-        goToLocation(cfi);
-      } catch (err) {
-        if (DEBUG) console.warn('[reader] slider navigation error:', err);
-      }
-    };
-
-    navigateToPage();
-  }, [DEBUG, setProgress, setTotalLocations, goToLocation]);
+    if (!book?.locations || !locationsReadyRef.current) return;
+    
+    try {
+      const total = book.locations.length() || 1;
+      const cfi = book.locations.cfiFromPercentage((page - 0.5) / total);
+      setProgress(Number(((page - 0.5) / total * 100).toFixed(2)));
+      goToLocation(cfi);
+    } catch (err) {
+      if (DEBUG) console.warn('[reader] navigation error:', err);
+    }
+  }, [DEBUG, setProgress, goToLocation, showSettings]);
 
   // Página actual y total (basado en locations); progreso es 0..100
   const totalPages = totalLocations || 0;
@@ -863,90 +676,37 @@ export default function Lector(props) {
           className="Lector-viewer"
           ref={viewerRef}
           style={{ filter: `brightness(${prefs.brightness})` }}
-          onMouseMove={(e) => { e.stopPropagation(); triggerShowPageArrows(); }}
-          onMouseEnter={(e) => { e.stopPropagation(); triggerShowPageArrows(); }}
-          onMouseLeave={(e) => {
-            // iniciar timeout (triggerShowPageArrows ya inicia/renueva), aquí solo dejar que expire
-            if (hideArrowsTimerRef.current) {
-              clearTimeout(hideArrowsTimerRef.current);
-            }
-            hideArrowsTimerRef.current = setTimeout(() => {
-              setShowPageArrows(false);
-              hideArrowsTimerRef.current = null;
-            }, 3000);
-          }}
+          onMouseMove={triggerShowPageArrows}
+          onMouseEnter={triggerShowPageArrows}
+          onMouseLeave={hidePageArrows}
         >
           {!ready && <div className="Lector-loading">Cargando libro…</div>}
           {/* hidden video preview for webcam when recording (kept hidden by default) */}
           <video ref={videoPreviewRef} autoPlay playsInline muted style={{ display: 'none' }} />
           {/* epub.js renderiza aquí */}
 
-          {/* Flechas laterales dentro del área de lectura */}
-          <button 
-            className={`NavArrow left ${showPageArrows ? 'visible' : ''}`}
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              goPrev(); 
-              triggerShowPageArrows(); 
-            }}
-            style={{
-              position: 'absolute',
-              left: '20px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              opacity: showPageArrows ? 1 : 0,
-              visibility: showPageArrows ? 'visible' : 'hidden',
-              transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-              pointerEvents: showPageArrows ? 'auto' : 'none',
-              zIndex: 50,
-              width: '56px',
-              height: '56px',
-              background: '#ffffff',
-              border: '1px solid #e6e6e6',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '1.2rem',
-              color: '#1b5e5a',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            ◀
-          </button>
+          {/* Flechas laterales para navegación */}
+          <div className="NavArrows">
+            <button 
+              className={`NavArrow left ${showPageArrows ? 'visible' : ''}`}
+              onClick={(e) => { 
+                e.stopPropagation();
+                e.preventDefault(); 
+                goPrev();
+                triggerShowPageArrows();
+              }}
+            >◀</button>
 
-          <button
-            className={`NavArrow right ${showPageArrows ? 'visible' : ''}`}
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              goNext(); 
-              triggerShowPageArrows(); 
-            }}
-            style={{
-              position: 'absolute',
-              right: '20px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              opacity: showPageArrows ? 1 : 0,
-              visibility: showPageArrows ? 'visible' : 'hidden',
-              transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                pointerEvents: showPageArrows ? 'auto' : 'none',
-              zIndex: 50,
-              width: '56px',
-              height: '56px',
-              background: '#ffffff',
-              border: '1px solid #e6e6e6',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '1.2rem',
-              color: '#1b5e5a',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            ▶
-          </button>
+            <button
+              className={`NavArrow right ${showPageArrows ? 'visible' : ''}`}
+              onClick={(e) => { 
+                e.stopPropagation();
+                e.preventDefault();
+                goNext();
+                triggerShowPageArrows();
+              }}
+            >▶</button>
+          </div>
         </main>
 
         <footer className="Lector-footer">
