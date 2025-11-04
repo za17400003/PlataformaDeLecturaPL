@@ -3,6 +3,7 @@ import ePub from 'epubjs';
 import './lector.css';
 import { useBuildPrefsCss, useInjectCssIntoContents, useApplyPrefsToRendition } from './hooks/usePreferences';
 import { useNavigation } from './hooks/useNavigation';
+import { useGazepoint } from './hooks/useGazepoint';
 
 export default function Lector(props) {
   const { archivo, onClose } = props;
@@ -158,6 +159,10 @@ export default function Lector(props) {
     if (!rendition?.manager?.container || !mountedRef.current) return;
     
     return new Promise((resolve) => {
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
+      
       requestAnimationFrame(() => {
         try {
           if (mountedRef.current) {
@@ -231,11 +236,11 @@ export default function Lector(props) {
   useEffect(() => {
     if (!archivo) return;
 
-    // Asegurarse de que empezamos en modo una página
+    // Siempre empezar en modo una página
     setIsTwoPages(false);
     mountedRef.current = true;
     
-    // Detener y limpiar ResizeObserver anterior si existe
+    // Limpiar ResizeObserver anterior
     if (resizeObserverRef.current) {
       resizeObserverRef.current.disconnect();
       resizeObserverRef.current = null;
@@ -276,9 +281,13 @@ export default function Lector(props) {
 
         // Crear y cargar el libro
         const book = ePub(archivo);
-        await book.ready;
         bookRef.current = book;
-
+        
+        // Asegurar que el libro y su package.json estén cargados
+        await book.ready;
+        await book.loaded.navigation;
+        await book.loaded.metadata;
+        
         // Configuración básica del rendition
         const rendition = book.renderTo(viewerRef.current, {
           width: '100%',
@@ -419,6 +428,7 @@ export default function Lector(props) {
     const rendition = renditionRef.current;
     if (!rendition) return;
 
+    // Función que actualiza el layout basado en el modo de visualización
     async function updateLayout() {
       try {
         if (isTwoPages) {
@@ -505,8 +515,10 @@ export default function Lector(props) {
       }
     }
 
-    updateLayout();
-  }, [isTwoPages, renditionRef, safeRenditionResize, injectCssIntoContents]);
+    if (rendition.manager?.container) {
+      updateLayout();
+    }
+  }, [isTwoPages, renditionRef, bookRef, safeRenditionResize, injectCssIntoContents, DEBUG]);
 
   // Recalcular ubicaciones cuando cambian ajustes que afectan el layout
   useEffect(() => {
@@ -554,8 +566,21 @@ export default function Lector(props) {
   }, []);
 
   // Recording functions
+  const { startRecording: startGazeTracking, stopRecording: stopGazeTracking } = useGazepoint();
+  
   const startRecording = useCallback(async () => {
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        console.error('getUserMedia no soportado');
+        return;
+      }
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const recordingPath = `recordings/${timestamp}`;
+
+      // Iniciar eye tracking
+      startGazeTracking(recordingPath);
+
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       streamRef.current = stream;
 
@@ -574,6 +599,7 @@ export default function Lector(props) {
           const blob = new Blob(chunksRef.current, { type: 'video/webm' });
           const formData = new FormData();
           formData.append('video', blob, 'recording.webm');
+          formData.append('timestamp', timestamp);
           
           const response = await fetch('http://localhost:3001/upload', {
             method: 'POST',
@@ -583,10 +609,14 @@ export default function Lector(props) {
           if (!response.ok) {
             throw new Error('Error al guardar la grabación');
           }
+
+          // Detener eye tracking después de guardar el video
+          stopGazeTracking();
           
           chunksRef.current = [];
         } catch (error) {
           console.error('Error saving recording:', error);
+          stopGazeTracking(); // Asegurar que el eye tracking se detiene incluso en error
         }
       };
 
@@ -595,7 +625,7 @@ export default function Lector(props) {
     } catch (error) {
       console.error('Error starting recording:', error);
     }
-  }, []);
+  }, [startGazeTracking, stopGazeTracking]);
 
   const stopRecording = useCallback(() => {
     const mediaRecorder = mediaRecorderRef.current;
@@ -826,12 +856,18 @@ export default function Lector(props) {
           style={{ 
             filter: `brightness(${prefs.brightness})`,
             display: 'flex',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            position: 'relative',
+            overflow: 'hidden'
           }}
           onMouseMove={handleMouseMove}
           onMouseEnter={handleMouseMove}
           onMouseLeave={() => setShowPageArrows(false)}
         >
+          <style>{`
+            .Lector-viewer > div:first-of-type { display: none !important; }
+            .Lector-viewer > div:last-of-type { left: 0 !important; right: 0 !important; width: 100% !important; }
+          `}</style>
           {!ready && <div className="Lector-loading">Cargando libro…</div>}
           {/* hidden video preview for webcam when recording (kept hidden by default) */}
           <video ref={videoPreviewRef} autoPlay playsInline muted style={{ display: 'none' }} />

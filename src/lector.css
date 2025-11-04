@@ -22,6 +22,19 @@
   border: 0;
 }
 
+.Lector-viewer {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.Lector-viewer .epub-container {
+  background: #f7f6f2;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden;
+}
+
 /* modifier (se puede mantener por compatibilidad) */
 .Lector-panel--fullscreen {
   padding: 0; /* dejamos que header/footer ocupen su espacio */

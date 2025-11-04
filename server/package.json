@@ -1,0 +1,12 @@
+{
+  "name": "adl-gazepoint-server",
+  "version": "1.0.0",
+  "description": "Eye tracking server for ADL",
+  "main": "gazepoint-server.js",
+  "scripts": {
+    "start": "node gazepoint-server.js"
+  },
+  "dependencies": {
+    "ws": "^8.2.3"
+  }
+}
