@@ -18,7 +18,7 @@ export default function Lector(props) {
   const resizeObserverRef = useRef(null);
 
   // Estados generales del lector
-  const [isTwoPages, setIsTwoPages] = useState(false);
+  const [isTwoPages, setIsTwoPages] = useState(false); // Comienza en modo una página
   const [progress, setProgress] = useState(0); // 0..100
   const [ready, setReady] = useState(false);
   const [totalLocations, setTotalLocations] = useState(0);
@@ -86,12 +86,30 @@ export default function Lector(props) {
   }, [DEBUG, setProgress, setTotalLocations]);
 
   // Sistema de navegación
-  const { goNext, goPrev, goToLocation } = useNavigation(
+  const { goNext: baseGoNext, goPrev: baseGoPrev, goToLocation } = useNavigation(
     renditionRef,
     bookRef,
     DEBUG,
     updateProgressFromRendition
   );
+
+  const goNext = useCallback(() => {
+    if (isTwoPages) {
+      baseGoNext();
+      baseGoNext();
+    } else {
+      baseGoNext();
+    }
+  }, [isTwoPages, baseGoNext]);
+
+  const goPrev = useCallback(() => {
+    if (isTwoPages) {
+      baseGoPrev();
+      baseGoPrev();
+    } else {
+      baseGoPrev();
+    }
+  }, [isTwoPages, baseGoPrev]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -213,8 +231,15 @@ export default function Lector(props) {
   useEffect(() => {
     if (!archivo) return;
 
-    let cleanup = () => {};
+    // Asegurarse de que empezamos en modo una página
+    setIsTwoPages(false);
     mountedRef.current = true;
+    
+    // Detener y limpiar ResizeObserver anterior si existe
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+      resizeObserverRef.current = null;
+    }
 
     async function initBook() {
       // Limpiar cualquier instancia previa
@@ -254,15 +279,25 @@ export default function Lector(props) {
         await book.ready;
         bookRef.current = book;
 
-        // Configurar renderización
+        // Configuración básica del rendition
         const rendition = book.renderTo(viewerRef.current, {
           width: '100%',
           height: '100%',
           flow: 'paginated',
-          manager: 'default'
+          manager: 'default',
+          spread: false
         });
+
+        renditionRef.current = rendition;
         
+        // Esperar a que el libro esté listo
+        await book.ready;
+        
+        // Mostrar la primera página
         await rendition.display();
+        
+        // Asegurar que estamos en modo una página
+        rendition.spread(false);
 
         renditionRef.current = rendition;
 
@@ -337,15 +372,6 @@ export default function Lector(props) {
         
         setReady(true);
 
-        cleanup = () => {
-          try { rendition.off('relocated', onRelocated); } catch (e) {}
-          try { rendition.off('rendered', onRendered); } catch (e) {}
-          try { rendition.destroy(); } catch (e) {}
-          try { book.destroy(); } catch (e) {}
-          bookRef.current = null;
-          renditionRef.current = null;
-        };
-
       } catch (error) {
         console.error('[reader] initialization error:', error);
         setReady(true); // Marcar como ready incluso en error
@@ -364,12 +390,19 @@ export default function Lector(props) {
       }
 
       try {
-        cleanup();
+        if (renditionRef.current) {
+          renditionRef.current.destroy();
+          renditionRef.current = null;
+        }
+        if (bookRef.current) {
+          bookRef.current.destroy();
+          bookRef.current = null;
+        }
       } catch (e) {
         if (DEBUG) console.warn('[reader] cleanup error:', e);
       }
     };
-  }, [archivo, DEBUG, prefs, applyPrefsToRendition, updateProgressFromRendition]);
+  }, [archivo, DEBUG, prefs, applyPrefsToRendition, updateProgressFromRendition, isTwoPages]);
 
   // limpiar timer de flechas al desmontar
   useEffect(() => {
@@ -381,58 +414,99 @@ export default function Lector(props) {
     };
   }, []);
 
-  // cambiar entre 1 y 2 páginas usando tema (column-count)
+  // cambiar entre 1 y 2 páginas y configurar spread
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!rendition) return;
 
-    // CSS para spread (ajustar según isTwoPages)
-    const css = isTwoPages ? `
-      body { column-count: 2; column-gap: 2.2rem !important; }
-      /* fuerza que cada columna se parezca a una página */
-      .epubjs-container { display: block !important; }
-      html, body { height: 100% !important; }
-    ` : `
-      /* Single page mode: 1 column, expandir horizontalmente */
-      body { column-count: 1 !important; column-gap: 0 !important; }
-      .epubjs-container { display: block !important; width: 100% !important; max-width: none !important; }
-      html, body { height: 100% !important; }
-      /* asegurar que los elementos internos no limiten el ancho */
-      body, body * { max-width: 100% !important; }
-    `;
-
-    try {
-      // Forzar settings del renderer si está disponible
-      if (typeof rendition.settings === 'function') {
-        rendition.settings({ spread: isTwoPages ? 'both' : 'none' });
-      } else if (rendition.settings && typeof rendition.settings === 'object') {
-        rendition.settings.spread = isTwoPages ? 'both' : 'none';
-      }
-    } catch (e) {
-      // no crítico
-    }
-
-    // INYECTAR CSS DIRECTAMENTE en cada iframe/document (evita crear <link href="CSS-TEXT">)
-    try {
-      injectCssIntoContents(rendition, css);
-    } catch (e) {
-      // fallback si algo falla
-      console.warn('injectCssIntoContents falló:', e);
-    }
-
-    // forzar resize/display para reflujo correcto
-    (async () => {
-  try { await safeRenditionResize(); } catch (e) {}
+    async function updateLayout() {
       try {
-        const loc = rendition.currentLocation && rendition.currentLocation();
-        const cfi = ((loc && (loc.start ? loc.start.cfi : loc.cfi)) || null);
-        if (cfi) await rendition.display(cfi);
-        else await rendition.display();
-      } catch (e) {}
-    })();
+        if (isTwoPages) {
+          rendition.spread('both');
+        } else {
+          rendition.spread(false);
+        }
+        await rendition.display();
+        const containerClass = isTwoPages ? 'two-pages' : 'single-page';
+        viewerRef.current.className = `Lector-viewer ${containerClass}`;
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTwoPages]);
+        if (isTwoPages) {
+          // Primero limpiar el rendition actual
+          await rendition.clear();
+          
+          // Configurar el spread para dos páginas
+          rendition.settings.spread = true;
+          rendition._layout.spread = true;
+          rendition.spread('both');
+          
+          // Re-renderizar la página actual
+          await rendition.display();
+        } else {
+          // Limpiar y configurar para una página
+          await rendition.clear();
+          rendition.settings.spread = false;
+          rendition._layout.spread = false;
+          rendition.spread(false);
+          
+          // Re-renderizar la página actual
+          await rendition.display();
+        }
+        
+        // Dar tiempo para que el cambio se aplique
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        // CSS específico para cada modo
+        const css = isTwoPages ? `
+          .epub-container {
+            background: white !important;
+          }
+          .epub-view {
+            display: flex !important;
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .epub-view > iframe {
+            width: 50% !important;
+            max-width: 50% !important;
+            margin: 0 !important;
+          }
+        ` : `
+          .epub-container {
+            background: white !important;
+          }
+          .epub-view {
+            display: block !important;
+            width: 100% !important;
+          }
+          .epub-view > iframe {
+            width: 100% !important;
+            max-width: 800px !important;
+            margin: 0 auto !important;
+            display: block !important;
+          }
+        `;
+
+        // Aplicar CSS
+        await injectCssIntoContents(rendition, css);
+        
+        // Realizar el resize después de aplicar el CSS
+        await safeRenditionResize();
+
+        // Re-mostrar en la ubicación actual para asegurar el layout correcto
+        const loc = rendition.currentLocation();
+        if (loc) {
+          const cfi = loc.start ? loc.start.cfi : loc.cfi;
+          if (cfi) {
+            await rendition.display(cfi);
+          }
+        }
+      } catch (e) {
+        console.warn('Error al cambiar modo de visualización:', e);
+      }
+    }
+
+    updateLayout();
+  }, [isTwoPages, renditionRef, safeRenditionResize, injectCssIntoContents]);
 
   // Recalcular ubicaciones cuando cambian ajustes que afectan el layout
   useEffect(() => {
@@ -484,11 +558,6 @@ export default function Lector(props) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       streamRef.current = stream;
-      
-      if (videoPreviewRef.current) {
-        videoPreviewRef.current.srcObject = stream;
-        videoPreviewRef.current.style.display = 'block';
-      }
 
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -500,17 +569,25 @@ export default function Lector(props) {
         }
       };
 
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        document.body.appendChild(a);
-        a.style.display = 'none';
-        a.href = url;
-        a.download = 'recording.webm';
-        a.click();
-        window.URL.revokeObjectURL(url);
-        chunksRef.current = [];
+      mediaRecorder.onstop = async () => {
+        try {
+          const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+          const formData = new FormData();
+          formData.append('video', blob, 'recording.webm');
+          
+          const response = await fetch('http://localhost:3001/upload', {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!response.ok) {
+            throw new Error('Error al guardar la grabación');
+          }
+          
+          chunksRef.current = [];
+        } catch (error) {
+          console.error('Error saving recording:', error);
+        }
       };
 
       mediaRecorder.start();
@@ -744,9 +821,13 @@ export default function Lector(props) {
         </div>
 
         <main
-          className="Lector-viewer"
+          className="Lector-viewer single-page"
           ref={viewerRef}
-          style={{ filter: `brightness(${prefs.brightness})` }}
+          style={{ 
+            filter: `brightness(${prefs.brightness})`,
+            display: 'flex',
+            justifyContent: 'center'
+          }}
           onMouseMove={handleMouseMove}
           onMouseEnter={handleMouseMove}
           onMouseLeave={() => setShowPageArrows(false)}
