@@ -7,7 +7,7 @@ import nubeSoplonaIzq from './assets/nubesoplonaizq.png';
 import nubeSoplonaDer from './assets/nubesoplonader.png';
 import flechaIzq from './assets/flechaizq.png';
 import flechaDer from './assets/flechader.png';
-import Lector from './Lector'; // agregado: lector
+import LectorSimple from './LectorSimple';
 
 function Biblioteca() {
   const [libros, setLibros] = useState([]);
@@ -19,10 +19,40 @@ function Biblioteca() {
   const librosPorPagina = 6;
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/libros')
-      .then(res => res.json())
-      .then(data => setLibros(data))
-      .catch(err => console.error('Error al obtener libros:', err));
+    const cargarLibros = async () => {
+      console.log('Solicitando lista de libros al servidor...');
+      try {
+  const res = await fetch('http://localhost:3001/api/libros');
+        console.log('Respuesta recibida:', res.status);
+        console.log('Headers:', res.headers);
+
+        if (!res.ok) {
+          throw new Error(`Error del servidor: ${res.status}`);
+        }
+
+        const data = await res.text();
+        console.log('Respuesta cruda:', data);
+
+        if (!data) {
+          console.error('Respuesta vacía del servidor');
+          return;
+        }
+
+        const json = JSON.parse(data);
+        console.log('Libros cargados:', json);
+
+        if (Array.isArray(json)) {
+          setLibros(json);
+        } else {
+          console.error('Formato de respuesta inesperado:', json);
+        }
+      } catch (err) {
+        console.error('Error al obtener libros:', err);
+        setLibros([]);
+      }
+    };
+
+    cargarLibros();
   }, []);
 
   useEffect(() => {
@@ -30,18 +60,32 @@ function Biblioteca() {
       const resultados = await Promise.all(
         libros.map(async (libro) => {
           try {
+            console.log('Intentando cargar libro:', libro.archivo);
             const epub = ePub(libro.archivo);
-            await epub.ready;
-
-            const tituloReal = epub.package?.metadata?.title || libro.titulo;
-            const coverUrl = await epub.loaded.cover;
-
-            let portada = null;
-            if (coverUrl) {
-              portada = await epub.archive.createUrl(coverUrl, { base64: true });
+            
+            try {
+              await epub.ready;
+              console.log('Libro cargado correctamente:', libro.titulo);
+            } catch (error) {
+              console.error('Error en epub.ready:', error);
+              throw error;
             }
 
-            // agregado: incluir archivo para poder abrir en el lector
+            let tituloReal = libro.titulo;
+            let portada = null;
+
+            try {
+              tituloReal = epub.package?.metadata?.title || libro.titulo;
+              const coverUrl = await epub.loaded.cover;
+              
+              if (coverUrl) {
+                portada = await epub.archive.createUrl(coverUrl, { base64: true });
+                console.log('Portada cargada para:', libro.titulo);
+              }
+            } catch (error) {
+              console.error('Error al cargar metadatos/portada:', error);
+            }
+
             return { titulo: tituloReal, portada, archivo: libro.archivo };
           } catch (error) {
             console.error(`Error al cargar ${libro.archivo}:`, error);
@@ -92,6 +136,14 @@ function Biblioteca() {
     }, 1200);
   };
 
+  console.log('Estado actual:', {
+    libros: libros.length,
+    portadas: portadas.length,
+    librosPorPagina,
+    paginaActual,
+    librosVisibles: librosVisibles.length
+  });
+
   return (
     <div className="Biblioteca fade-in">
       <h2 className="Titulo-biblioteca">📚 Biblioteca</h2>
@@ -113,14 +165,17 @@ function Biblioteca() {
         )}
 
         <div className="Nubes-blancas">
-          {/* Skeleton placeholders (same DOM structure que las nubes reales) */}
-          {portadas.length === 0 && libros.length > 0 && (
-            Array.from({ length: librosPorPagina }).map((_, i) => (
-              <div key={`sk-${i}`} className="Libro-nube" style={{ cursor: 'default', '--float-duration': '4s', '--float-delay': '0s' }}>
-                <div className="Nube-blanca Skeleton-card" />
-                <div className="Skeleton-title" />
-              </div>
-            ))
+          {/* Skeleton placeholders mientras se cargan los libros */}
+          {portadas.length === 0 && (
+            <>
+              {Array.from({ length: librosPorPagina }).map((_, i) => (
+                <div key={`sk-${i}`} className="Libro-nube" style={{ cursor: 'default', '--float-duration': '4s', '--float-delay': '0s' }}>
+                  <div className="Nube-blanca Skeleton-card">
+                    <div className="Skeleton-title" />
+                  </div>
+                </div>
+              ))}
+            </>
           )}
 
           {portadas.length > 0 && librosVisibles.map((libro, index) => {
@@ -171,7 +226,7 @@ function Biblioteca() {
 
       {/* agregado: Lector modal */}
       {libroSeleccionado && (
-        <Lector archivo={libroSeleccionado} onClose={() => setLibroSeleccionado(null)} />
+        <LectorSimple archivo={libroSeleccionado} onClose={() => setLibroSeleccionado(null)} />
       )}
     </div>
   );

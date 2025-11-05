@@ -184,6 +184,10 @@
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
   margin-bottom: -0.9rem;
+  opacity: 1 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .Nube-blanca.Skeleton-card {
   /* cuando mostramos placeholder, queremos que la nube no esté oculta por fade-in */

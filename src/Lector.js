@@ -57,6 +57,17 @@ export default function Lector(props) {
     };
   });
 
+  // Gestión de flechas de navegación
+  const handleMouseMove = useCallback(() => {
+    // Keep arrows visible while the mouse is over the reader area.
+    // We show arrows on mouse move/enter and rely on onMouseLeave to hide them.
+    setShowPageArrows(true);
+    if (hideArrowsTimerRef.current) {
+      clearTimeout(hideArrowsTimerRef.current);
+      hideArrowsTimerRef.current = null;
+    }
+  }, []);
+
   // Función para actualizar el progreso desde la ubicación actual
   const updateProgressFromRendition = useCallback(async (locObj) => {
     const rendition = renditionRef.current;
@@ -81,10 +92,13 @@ export default function Lector(props) {
       progressRef.current = progress;
 
       if (DEBUG) console.debug('[reader] progress updated:', progress.toFixed(2));
+      
+      // Asegurar que las flechas sean visibles después de actualizar el progreso
+      handleMouseMove();
     } catch (e) {
       if (DEBUG) console.warn('[reader] progress update error:', e);
     }
-  }, [DEBUG, setProgress, setTotalLocations]);
+  }, [DEBUG, setProgress, setTotalLocations, handleMouseMove]);
 
   // Sistema de navegación
   const { goNext: baseGoNext, goPrev: baseGoPrev, goToLocation } = useNavigation(
@@ -95,20 +109,57 @@ export default function Lector(props) {
   );
 
   const goNext = useCallback(() => {
+    if (!mountedRef.current) return;
+    
     if (isTwoPages) {
-      baseGoNext();
-      baseGoNext();
+      try {
+        baseGoNext();
+        baseGoNext();
+      } catch (e) {
+        if (DEBUG) console.warn('[reader] goNext error, attempting safe fallback', e);
+        const r = renditionRef.current;
+        if (r && r.display) {
+          // try a safe redisplay to recover
+          try { r.display(); } catch (err) { if (DEBUG) console.warn('[reader] fallback display failed', err); }
+        }
+      }
     } else {
-      baseGoNext();
+      try {
+        baseGoNext();
+      } catch (e) {
+        if (DEBUG) console.warn('[reader] goNext error, attempting safe fallback', e);
+        const r = renditionRef.current;
+        if (r && r.display) {
+          try { r.display(); } catch (err) { if (DEBUG) console.warn('[reader] fallback display failed', err); }
+        }
+      }
     }
   }, [isTwoPages, baseGoNext]);
 
   const goPrev = useCallback(() => {
+    if (!mountedRef.current) return;
+    
     if (isTwoPages) {
-      baseGoPrev();
-      baseGoPrev();
+      try {
+        baseGoPrev();
+        baseGoPrev();
+      } catch (e) {
+        if (DEBUG) console.warn('[reader] goPrev error, attempting safe fallback', e);
+        const r = renditionRef.current;
+        if (r && r.display) {
+          try { r.display(); } catch (err) { if (DEBUG) console.warn('[reader] fallback display failed', err); }
+        }
+      }
     } else {
-      baseGoPrev();
+      try {
+        baseGoPrev();
+      } catch (e) {
+        if (DEBUG) console.warn('[reader] goPrev error, attempting safe fallback', e);
+        const r = renditionRef.current;
+        if (r && r.display) {
+          try { r.display(); } catch (err) { if (DEBUG) console.warn('[reader] fallback display failed', err); }
+        }
+      }
     }
   }, [isTwoPages, baseGoPrev]);
 
@@ -156,7 +207,7 @@ export default function Lector(props) {
   // Handler de resize seguro con debounce y RAF
   const safeRenditionResize = useCallback(async (renditionArg) => {
     const rendition = renditionArg || renditionRef.current;
-    if (!rendition?.manager?.container || !mountedRef.current) return;
+    if (!rendition?.manager?.container || !mountedRef.current || !rendition.display) return;
     
     return new Promise((resolve) => {
       if (resizeObserverRef.current) {
@@ -246,87 +297,155 @@ export default function Lector(props) {
       resizeObserverRef.current = null;
     }
 
-    async function initBook() {
-      // Limpiar cualquier instancia previa
-      if (renditionRef.current) {
-        try {
-          renditionRef.current.destroy();
-        } catch (e) {}
-        renditionRef.current = null;
-      }
-      if (bookRef.current) {
-        try {
-          bookRef.current.destroy();
-        } catch (e) {}
-        bookRef.current = null;
-      }
-      
-      // Detener ResizeObserver anterior si existe
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
+    const initBook = async () => {
+      if (!mountedRef.current) return;
+
       try {
-        // Limpieza previa si es necesaria
-        if (bookRef.current) {
+        // Limpiar cualquier instancia previa
+        if (renditionRef.current) {
           try {
-            renditionRef.current?.destroy();
-            bookRef.current.destroy();
+            renditionRef.current.destroy();
           } catch (e) {
-            console.warn('[reader] cleanup error:', e);
+            if (DEBUG) console.warn('[reader] error destroying rendition:', e);
           }
-          bookRef.current = null;
           renditionRef.current = null;
         }
 
+        if (bookRef.current) {
+          try {
+            bookRef.current.destroy();
+          } catch (e) {
+            if (DEBUG) console.warn('[reader] error destroying book:', e);
+          }
+          bookRef.current = null;
+        }
+        
+        // Detener ResizeObserver anterior si existe
+        if (resizeObserverRef.current) {
+          resizeObserverRef.current.disconnect();
+          resizeObserverRef.current = null;
+        }
+        
         // Crear y cargar el libro
+        if (DEBUG) {
+          console.log('Creando nueva instancia del libro...', {
+            archivo,
+            tipo: typeof archivo,
+            url: archivo instanceof Blob ? URL.createObjectURL(archivo) : archivo
+          });
+        }
         const book = ePub(archivo);
         bookRef.current = book;
         
-        // Asegurar que el libro y su package.json estén cargados
+        // Esperar a que el libro esté completamente cargado
+        if (DEBUG) console.log('Esperando a que el libro esté listo...');
         await book.ready;
-        await book.loaded.navigation;
-        await book.loaded.metadata;
+        if (DEBUG) {
+          console.log('Libro cargado:', {
+            spine: book.spine.length,
+            metadata: book.package.metadata
+          });
+        }
         
-        // Configuración básica del rendition
+        if (!mountedRef.current) return;
+
+        // Crear el rendition después de que el libro esté listo
+  if (DEBUG) console.log('Libro listo, creando rendition...');
+  // Hide viewer until we get the first rendered event to avoid white flash
+  try { viewerRef.current?.classList.add('hidden'); } catch(e) {}
         const rendition = book.renderTo(viewerRef.current, {
           width: '100%',
           height: '100%',
           flow: 'paginated',
           manager: 'default',
-          spread: false
+          spread: isTwoPages ? 'always' : 'none',
+          minSpreadWidth: 1000, // Ayuda con el modo de dos páginas
+          allowScriptedContent: false // Seguridad
         });
+        
+  renditionRef.current = rendition;
+        
+        // Esperar a que el rendition esté listo (o timeout)
+        if (DEBUG) console.log('Esperando a que el rendition esté listo...');
+        await Promise.race([
+          new Promise((resolve) => {
+            try {
+              rendition.once('rendered', () => {
+                if (DEBUG) console.log('Rendition rendered event fired');
+                resolve('rendered');
+              });
+            } catch (e) {
+              if (DEBUG) console.warn('[reader] error attaching rendered listener', e);
+              resolve('error');
+            }
+          }),
+          new Promise((resolve) => setTimeout(() => {
+            console.warn('[reader] rendition.rendered timeout after 4000ms, continuing');
+            resolve('timeout');
+          }, 4000))
+        ]);
+        
+        if (!mountedRef.current) return;
 
-        renditionRef.current = rendition;
-        
-        // Esperar a que el libro esté listo
-        await book.ready;
-        
-        // Mostrar la primera página
-        await rendition.display();
-        
+        // Ahora cargar el resto de los componentes (no bloquear si alguno tarda)
+        if (DEBUG) console.log('Cargando componentes del libro...');
+        try {
+          const loadedPromises = [
+            book.loaded?.navigation,
+            book.loaded?.metadata,
+            book.loaded?.cover,
+            book.loaded?.spine
+          ].filter(Boolean);
+
+          const settled = await Promise.allSettled(loadedPromises.map(p => (
+            // wrap each promise with a small timeout to avoid indefinite wait
+            Promise.race([p, new Promise((res) => setTimeout(() => res('timeout'), 3000))])
+          )));
+          if (DEBUG) console.log('[reader] loaded components status:', settled);
+        } catch (e) {
+          if (DEBUG) console.warn('[reader] error loading components:', e);
+        }
+
+        // Generar locations antes de mostrar la primera página
+        if (!book.locations.length()) {
+          if (DEBUG) console.log('Generando locations...');
+          await book.locations.generate(300);
+          locationsReadyRef.current = true;
+          setTotalLocations(book.locations.length());
+        }
+
+        // Mostrar la primera página (con protección)
+        if (DEBUG) console.log('Mostrando primera página...');
+        try {
+          const firstHref = book.spine && book.spine.get && book.spine.get(0) && book.spine.get(0).href;
+          if (firstHref) {
+            await rendition.display(firstHref);
+          } else {
+            await rendition.display();
+          }
+        } catch (err) {
+          if (DEBUG) console.warn('[reader] rendition.display failed, trying fallback', err);
+          try { await rendition.display(); } catch (err2) { if (DEBUG) console.error('[reader] fallback rendition.display also failed', err2); }
+        }
+
         // Asegurar que estamos en modo una página
         rendition.spread(false);
-
-        renditionRef.current = rendition;
-
+        
         // Configurar ResizeObserver después de tener el rendition
-        const resizeObserver = new ResizeObserver((entries) => {
-          if (!mountedRef.current) return;
+        const resizeObserver = new ResizeObserver(() => {
+          if (!mountedRef.current || !renditionRef.current) return;
           
           requestAnimationFrame(() => {
-            if (!mountedRef.current) return;
+            if (!mountedRef.current || !renditionRef.current) return;
             
-            for (let entry of entries) {
-              if (entry.target === viewerRef.current && renditionRef.current) {
-                try {
-                  renditionRef.current.resize();
-                  // Re-aplicar preferencias después del resize
-                  applyPrefsToRendition(renditionRef.current, prefs);
-                } catch (e) {
-                  if (DEBUG) console.warn('[reader] resize error:', e);
-                }
+            try {
+              renditionRef.current.resize();
+              applyPrefsToRendition(renditionRef.current, prefs);
+              if (showPageArrows) {
+                handleMouseMove();
               }
+            } catch (e) {
+              if (DEBUG) console.warn('[reader] resize error:', e);
             }
           });
         });
@@ -336,58 +455,81 @@ export default function Lector(props) {
           resizeObserverRef.current = resizeObserver;
         }
 
-        // Configurar tema por defecto
-        rendition.themes.default({
-          body: { 
-            margin: '0 auto !important',
-            padding: '2rem !important',
-            'max-width': '800px !important',
-            'font-size': 'initial !important',
-            'line-height': 'initial !important'
+        // Configurar tema por defecto con texto justificado y centrado
+        if (DEBUG) console.log('Aplicando estilos por defecto...');
+        await renditionRef.current.themes.default({
+          '*': {
+            'box-sizing': 'border-box',
+            'margin': '0',
+            'padding': '0'
+          },
+          'body': { 
+            'margin': '0 auto',
+            'padding': '2rem',
+            'max-width': '800px',
+            'text-align': 'justify',
+            'hyphens': 'auto',
+            '-webkit-hyphens': 'auto',
+            '-ms-hyphens': 'auto',
+            'font-family': 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+          },
+          'p': {
+            'text-align': 'justify',
+            'margin': '1em 0',
+            'line-height': '1.6'
+          },
+          'img': {
+            'display': 'block',
+            'margin': '1em auto',
+            'max-width': '100%',
+            'height': 'auto'
           }
         });
 
-        // Event handlers
-        const onRelocated = (loc) => {
+        // Configurar event handlers
+        renditionRef.current.on('relocated', (loc) => {
+          if (!mountedRef.current) return;
           updateProgressFromRendition(loc).catch(() => {});
-          applyPrefsToRendition(rendition, prefs);
-        };
-
-        const onRendered = () => {
-          applyPrefsToRendition(rendition, prefs);
-        };
-
-        rendition.on('relocated', onRelocated);
-        rendition.on('rendered', onRendered);
-
-        renditionRef.current = rendition;
-
-        // Configurar tema por defecto y navegación
-        rendition.themes.default({
-          body: { 
-            margin: '0 auto',
-            padding: '1rem',
-            'max-width': '800px'
-          }
+          try { applyPrefsToRendition(renditionRef.current, prefs); } catch (e) { if (DEBUG) console.warn('[reader] applyPrefs relocated error', e); }
         });
 
-        // Aplicar preferencias iniciales
-        applyPrefsToRendition(rendition, prefs);
+        renditionRef.current.on('rendered', (section) => {
+          if (!mountedRef.current) return;
+          try {
+            applyPrefsToRendition(renditionRef.current, prefs);
+          } catch (e) {
+            if (DEBUG) console.warn('[reader] applyPrefs rendered error', e);
+          }
+          // Ensure internal content exists before touching it
+          try {
+            if (section && section.document) {
+              // set background color inside iframe/doc to reduce white flashes
+              try { section.document.body.style.background = ''; } catch (e) {}
+            }
+          } catch (ee) {
+            if (DEBUG) console.warn('[reader] section safety check failed', ee);
+          }
+          handleMouseMove();
 
-        // Generar locations
-        await book.locations.generate(300);
-        locationsReadyRef.current = true;
-        setTotalLocations(book.locations.length());
-        
+          // Reveal viewer after first render
+          try {
+            if (viewerRef.current) {
+              viewerRef.current.classList.remove('hidden');
+              // small delay to ensure CSS applied
+              setTimeout(() => {
+                if (viewerRef.current) viewerRef.current.classList.add('fade-in');
+              }, 30);
+            }
+          } catch (e) { if (DEBUG) console.warn('[reader] reveal viewer failed', e); }
+        });
+
+        // Marcar como listo
         setReady(true);
-
       } catch (error) {
         console.error('[reader] initialization error:', error);
         setReady(true); // Marcar como ready incluso en error
       }
-    }
-
-    initBook();
+    };    initBook();
 
     // Cleanup function
     return () => {
@@ -411,7 +553,7 @@ export default function Lector(props) {
         if (DEBUG) console.warn('[reader] cleanup error:', e);
       }
     };
-  }, [archivo, DEBUG, prefs, applyPrefsToRendition, updateProgressFromRendition, isTwoPages]);
+  }, [archivo, DEBUG, prefs, applyPrefsToRendition, updateProgressFromRendition, isTwoPages, handleMouseMove, showPageArrows]);
 
   // limpiar timer de flechas al desmontar
   useEffect(() => {
@@ -540,6 +682,8 @@ export default function Lector(props) {
           // actualizar progreso basado en la ubicación actual
           if (alive) {
             await updateProgressFromRendition();
+            // Asegurar que las flechas sean visibles después de actualizar el layout
+            handleMouseMove();
           }
         } catch (e) {
           // ignore
@@ -547,18 +691,7 @@ export default function Lector(props) {
     })();
 
     return () => { alive = false; };
-  }, [prefs.fontSize, prefs.lineHeight, isTwoPages, updateProgressFromRendition]);
-
-  // Gestión de flechas de navegación
-  const handleMouseMove = useCallback(() => {
-    setShowPageArrows(true);
-    if (hideArrowsTimerRef.current) {
-      clearTimeout(hideArrowsTimerRef.current);
-    }
-    hideArrowsTimerRef.current = setTimeout(() => {
-      setShowPageArrows(false);
-    }, 2000);
-  }, []);
+  }, [prefs.fontSize, prefs.lineHeight, isTwoPages, updateProgressFromRendition, handleMouseMove]);
 
   // Toggle settings panel
   const toggleSettings = useCallback(() => {
@@ -598,15 +731,17 @@ export default function Lector(props) {
         try {
           const blob = new Blob(chunksRef.current, { type: 'video/webm' });
           const formData = new FormData();
-          formData.append('video', blob, 'recording.webm');
-          formData.append('timestamp', timestamp);
+          const videoBlob = new Blob([blob], { type: 'video/webm' });
+          formData.append('video', videoBlob, `${timestamp}.webm`);
           
-          const response = await fetch('http://localhost:3001/upload', {
+          const response = await fetch('http://localhost:3001/api/upload', {
             method: 'POST',
-            body: formData
+            body: formData,
           });
           
           if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Error de servidor:', errorText);
             throw new Error('Error al guardar la grabación');
           }
 
@@ -864,10 +999,7 @@ export default function Lector(props) {
           onMouseEnter={handleMouseMove}
           onMouseLeave={() => setShowPageArrows(false)}
         >
-          <style>{`
-            .Lector-viewer > div:first-of-type { display: none !important; }
-            .Lector-viewer > div:last-of-type { left: 0 !important; right: 0 !important; width: 100% !important; }
-          `}</style>
+          {/* inline styles removed: they hid epub.js container in some renderers */}
           {!ready && <div className="Lector-loading">Cargando libro…</div>}
           {/* hidden video preview for webcam when recording (kept hidden by default) */}
           <video ref={videoPreviewRef} autoPlay playsInline muted style={{ display: 'none' }} />

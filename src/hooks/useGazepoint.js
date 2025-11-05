@@ -3,74 +3,79 @@ import { useEffect, useRef, useState } from 'react';
 export function useGazepoint() {
   const wsRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
-  
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef(null);
+
   useEffect(() => {
-    // Conectar al servidor WebSocket del eye tracker
-    const ws = new WebSocket('ws://localhost:4000/gazepoint');
-    wsRef.current = ws;
+    function connect() {
+      try {
+        // Conecta al mismo servidor en la raíz (ws://localhost:3001)
+        const ws = new WebSocket('ws://localhost:3001');
+        wsRef.current = ws;
 
-    ws.onopen = () => {
-      console.log('Conectado al servidor de eye tracking');
-      setIsConnected(true);
-    };
+        ws.onopen = () => {
+          reconnectAttemptsRef.current = 0;
+          setIsConnected(true);
+          console.log('[gazepoint] WS conectado');
+        };
 
-    ws.onclose = () => {
-      console.log('Desconectado del servidor de eye tracking');
-      setIsConnected(false);
-    };
+        ws.onclose = () => {
+          setIsConnected(false);
+          scheduleReconnect();
+          console.log('[gazepoint] WS desconectado');
+        };
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'GAZEPOINT_DATA') {
-        const { leftEye, rightEye } = parseGazepointData(data.xmlData);
-        console.debug('Eye tracking data:', leftEye, rightEye);
+        ws.onerror = () => {
+          // El onclose se encargará del reconnect
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && data.type === 'GAZEPOINT_DATA') {
+              // data.leftEye {x,y}, data.rightEye {x,y}
+              // Aquí podríamos actualizar algún overlay si quisieras
+              // console.debug('gaze:', data.leftEye, data.rightEye);
+            }
+          } catch (_) {}
+        };
+      } catch (e) {
+        scheduleReconnect();
       }
-    };
+    }
 
+    function scheduleReconnect() {
+      if (reconnectTimerRef.current) return;
+      const delay = Math.min(15000, 500 * Math.pow(2, reconnectAttemptsRef.current++));
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
+        connect();
+      }, delay);
+    }
+
+    connect();
     return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       if (wsRef.current) {
-        wsRef.current.close();
+        try { wsRef.current.close(); } catch (_) {}
+        wsRef.current = null;
       }
     };
   }, []);
 
   const startRecording = (recordingPath) => {
-    if (!wsRef.current || !isConnected) return;
-    
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     const timestamp = new Date().toISOString();
-    wsRef.current.send(JSON.stringify({
-      type: 'START_RECORDING',
-      path: recordingPath,
-      timestamp: timestamp
-    }));
+    wsRef.current.send(JSON.stringify({ type: 'START_RECORDING', path: recordingPath, timestamp }));
   };
 
   const stopRecording = () => {
-    if (!wsRef.current || !isConnected) return;
-
-    wsRef.current.send(JSON.stringify({
-      type: 'STOP_RECORDING'
-    }));
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ type: 'STOP_RECORDING' }));
   };
 
-  return {
-    isConnected,
-    startRecording,
-    stopRecording
-  };
-}
-
-function parseGazepointData(xmlData) {
-  // Parsear datos XML del Gazepoint para ambos ojos
-  const leftEye = {
-    x: xmlData.match(/LFPOGX="([^"]+)"/) ? parseFloat(RegExp.$1) : 0,
-    y: xmlData.match(/LFPOGY="([^"]+)"/) ? parseFloat(RegExp.$1) : 0
-  };
-  
-  const rightEye = {
-    x: xmlData.match(/RFPOGX="([^"]+)"/) ? parseFloat(RegExp.$1) : 0,
-    y: xmlData.match(/RFPOGY="([^"]+)"/) ? parseFloat(RegExp.$1) : 0
-  };
-  
-  return { leftEye, rightEye };
+  return { isConnected, startRecording, stopRecording };
 }
