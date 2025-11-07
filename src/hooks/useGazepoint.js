@@ -9,8 +9,8 @@ export function useGazepoint() {
   useEffect(() => {
     function connect() {
       try {
-        // Conecta al mismo servidor en la raíz (ws://localhost:3001)
-        const ws = new WebSocket('ws://localhost:3001');
+        // Conecta al mismo servidor unificado (ws://localhost:3000)
+        const ws = new WebSocket('ws://localhost:3000');
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -66,10 +66,14 @@ export function useGazepoint() {
     };
   }, []);
 
-  const startRecording = (recordingPath) => {
+  const startRecording = (sessionTimestamp) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     const timestamp = new Date().toISOString();
-    wsRef.current.send(JSON.stringify({ type: 'START_RECORDING', path: recordingPath, timestamp }));
+    wsRef.current.send(JSON.stringify({ 
+      type: 'START_RECORDING', 
+      timestamp, 
+      sessionId: sessionTimestamp || timestamp.replace(/[:.]/g, '-')
+    }));
   };
 
   const stopRecording = () => {

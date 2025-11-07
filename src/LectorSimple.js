@@ -13,6 +13,7 @@ export default function LectorSimple(props) {
   const [progress, setProgress] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState('texto');
   const mediaRecorderRef = useRef(null);
@@ -20,6 +21,17 @@ export default function LectorSimple(props) {
   const chunksRef = useRef([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [enableGazeHighlight, setEnableGazeHighlight] = useState(false);
+  const [bookTitle, setBookTitle] = useState('Cargando...'); // Estado para el título del libro
+  
+  // Estados para el sistema de bloques de lectura
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [currentBlock, setCurrentBlock] = useState(1);
+  const [blockTimer, setBlockTimer] = useState(0); // en segundos
+  const [isBlockActive, setIsBlockActive] = useState(false);
+  const [blockTimerPosition, setBlockTimerPosition] = useState('center'); // 'center' | 'bottom'
+  const blockTimerRef = useRef(null);
+  const blockStartTime = useRef(null);
+  
   const [prefs, setPrefs] = useState({
     fontSize: 100,
     lineHeight: 1.45,
@@ -88,6 +100,11 @@ export default function LectorSimple(props) {
         await book.ready;
         if (!mounted) return;
 
+        // Obtener título del libro de los metadatos
+        const metadata = book.packaging.metadata;
+        const title = metadata.title || archivo.split('/').pop().replace('.epub', '') || 'Libro sin título';
+        setBookTitle(title);
+
         const rendition = book.renderTo(viewerRef.current, {
           width: '100%',
           height: '100%',
@@ -150,6 +167,16 @@ export default function LectorSimple(props) {
     }
   }, [gazeConnected, isRecording]);
 
+  // Limpiar timer de bloques al desmontar componente
+  useEffect(() => {
+    return () => {
+      if (blockTimerRef.current) {
+        clearInterval(blockTimerRef.current);
+        blockTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const goNext = () => {
     if (!renditionRef.current) return;
     renditionRef.current.next().catch(() => {});
@@ -173,26 +200,37 @@ export default function LectorSimple(props) {
 
   const startRecording = async () => {
     try {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      startGaze(`recordings/${timestamp}`);
-
+      // Generar timestamp único para esta sesión
+      const recordingTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       streamRef.current = stream;
 
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+      // Guardar el timestamp para usar cuando termine la grabación
+      mediaRecorderRef.current.recordingTimestamp = recordingTimestamp;
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
+      mediaRecorder.onstart = () => {
+        // Iniciar gazepoint con información del timestamp
+        startGaze(recordingTimestamp);
+        setIsRecording(true);
+        console.log('Grabación iniciada:', recordingTimestamp);
+      };
+
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        const sessionTimestamp = mediaRecorderRef.current.recordingTimestamp;
         const fd = new FormData();
-        fd.append('video', blob, `${timestamp}.webm`);
+        fd.append('video', blob, `${sessionTimestamp}.webm`);
+        fd.append('sessionId', sessionTimestamp); // Agregar el sessionId
         try {
-          await fetch('http://localhost:3001/api/upload', { method: 'POST', body: fd });
+          await fetch('/api/upload', { method: 'POST', body: fd });
           stopGaze();
         } catch (e) {
           console.error('Error upload:', e);
@@ -202,7 +240,7 @@ export default function LectorSimple(props) {
       };
 
       mediaRecorder.start();
-      setIsRecording(true);
+      // No establecer isRecording aquí, se hace en onstart
     } catch (e) {
       console.error('Error recording:', e);
     }
@@ -216,6 +254,21 @@ export default function LectorSimple(props) {
       streamRef.current.getTracks().forEach((t) => t.stop());
     }
     setIsRecording(false);
+    setIsPaused(false);
+  };
+
+  const pauseRecording = () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.pause();
+      setIsPaused(true);
+    }
+  };
+
+  const resumeRecording = () => {
+    if (mediaRecorderRef.current?.state === 'paused') {
+      mediaRecorderRef.current.resume();
+      setIsPaused(false);
+    }
   };
 
   const handleSliderChange = (e) => {
@@ -231,6 +284,76 @@ export default function LectorSimple(props) {
 
   const updatePref = (newPref) => {
     setPrefs(prev => ({ ...prev, ...newPref }));
+  };
+
+  // Funciones para el sistema de bloques
+  const startBlockTimer = () => {
+    if (blockTimerRef.current) return; // Ya hay un timer activo
+    
+    blockStartTime.current = Date.now();
+    setBlockTimer(0);
+    setIsBlockActive(true);
+    
+    // Animar el cronómetro al área inferior derecha
+    setTimeout(() => {
+      setBlockTimerPosition('bottom');
+    }, 500);
+    
+    blockTimerRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - blockStartTime.current) / 1000);
+      setBlockTimer(elapsed);
+      
+      // Si han pasado 5 minutos (300 segundos), terminar el bloque
+      if (elapsed >= 300) {
+        endCurrentBlock();
+      }
+    }, 1000);
+  };
+
+  const endCurrentBlock = () => {
+    if (blockTimerRef.current) {
+      clearInterval(blockTimerRef.current);
+      blockTimerRef.current = null;
+    }
+    
+    setIsBlockActive(false);
+    setBlockTimerPosition('center');
+    
+    // Si es el bloque 5, reiniciar. Si no, pasar al siguiente
+    if (currentBlock >= 5) {
+      setCurrentBlock(1);
+    } else {
+      setCurrentBlock(prev => prev + 1);
+    }
+    
+    // Mostrar modal para el siguiente bloque
+    setShowBlockModal(true);
+  };
+
+  const cancelBlockActivity = () => {
+    if (blockTimerRef.current) {
+      clearInterval(blockTimerRef.current);
+      blockTimerRef.current = null;
+    }
+    
+    setIsBlockActive(false);
+    setBlockTimerPosition('center');
+    setShowBlockModal(false);
+    setCurrentBlock(1); // Reiniciar al bloque 1
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const getTimestamp = () => {
+    return new Date().toLocaleTimeString('es-ES', { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit' 
+    });
   };
 
   return (
@@ -254,18 +377,38 @@ export default function LectorSimple(props) {
             👁️
           </button>
 
+          {/* Botón de pausa/reanudar (solo visible durante grabación) */}
+          {isRecording && (
+            <button
+              className={`pause-btn ${isPaused ? 'active' : ''}`}
+              onClick={isPaused ? resumeRecording : pauseRecording}
+              title={isPaused ? 'Reanudar grabación' : 'Pausar grabación'}
+            >
+              {isPaused ? '▶' : '⏸'}
+            </button>
+          )}
+
           {/* Botón de grabación */}
           <button
-            className={`record-btn ${isRecording ? 'active' : ''}`}
+            className={`record-btn ${isRecording ? 'active' : ''} ${isPaused ? 'paused' : ''}`}
             onClick={isRecording ? stopRecording : startRecording}
             title={isRecording ? 'Detener grabación' : 'Iniciar grabación'}
           >
             {isRecording ? '⏹' : '●'}
           </button>
+
+          {/* Botón de bloques de lectura */}
+          <button
+            className={`blocks-btn ${isBlockActive ? 'active' : ''}`}
+            onClick={() => setShowBlockModal(true)}
+            title="Iniciar bloques de lectura"
+          >
+            🧩
+          </button>
         </div>
 
         <header className="Lector-header">
-          <div className="Lector-title">📖 Leyendo</div>
+          <div className="Lector-title">📖 {bookTitle}</div>
           <div className="Lector-controls">
             <button
               className="HeaderBtn"
@@ -442,9 +585,13 @@ export default function LectorSimple(props) {
           {/* Flechas laterales */}
           <div className="NavArrows">
             <button 
-              className="NavArrow left visible"
-              onClick={(e) => { e.stopPropagation(); goPrev(); }}
-              title="Página anterior"
+              className={`NavArrow left visible ${isRecording ? 'disabled' : ''}`}
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                if (!isRecording) goPrev(); 
+              }}
+              disabled={isRecording}
+              title={isRecording ? 'No disponible durante grabación' : 'Página anterior'}
             >
               ◀
             </button>
@@ -474,6 +621,42 @@ export default function LectorSimple(props) {
             aria-label="Ir a página"
           />
         </footer>
+
+        {/* Modal de bloques de lectura */}
+        {showBlockModal && (
+          <div className="Block-modal-overlay">
+            <div className="Block-modal">
+              <h2>Bloque de lectura {currentBlock}</h2>
+              <p className="Block-timestamp">{getTimestamp()}</p>
+              <button
+                className="Block-start-btn"
+                onClick={() => {
+                  setShowBlockModal(false);
+                  startBlockTimer();
+                }}
+              >
+                Iniciar Bloque {currentBlock}
+              </button>
+              <button
+                className="Block-cancel-btn"
+                onClick={cancelBlockActivity}
+              >
+                Cancelar Actividad
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Cronómetro de bloques */}
+        {isBlockActive && (
+          <div className={`Block-timer ${blockTimerPosition === 'bottom' ? 'bottom-position' : 'center-position'}`}>
+            <div className="Block-timer-content">
+              <span className="Block-number">Bloque {currentBlock}</span>
+              <span className="Block-time">{formatTime(blockTimer)}</span>
+              <span className="Block-remaining">{formatTime(300 - blockTimer)}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

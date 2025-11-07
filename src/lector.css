@@ -64,7 +64,14 @@
   border-bottom: 1px solid rgba(0,0,0,0.04);
   z-index: 10;
 }
-.Lector-title { font-weight: 700; color: #1b5e5a; }
+.Lector-title { 
+  font-weight: 700; 
+  color: #1b5e5a; 
+  max-width: 300px; /* Limitar ancho máximo */
+  overflow: hidden; /* Ocultar overflow */
+  text-overflow: ellipsis; /* Agregar puntos suspensivos */
+  white-space: nowrap; /* Evitar salto de línea */
+}
 
 /* header controls layout */
 .Lector-controls {
@@ -113,6 +120,18 @@
 .NavArrow:hover {
   background: rgba(0, 0, 0, 0.7);
   transform: scale(1.15);
+}
+
+.NavArrow.disabled {
+  background: #ccc !important;
+  color: #999 !important;
+  cursor: not-allowed !important;
+  opacity: 0.5;
+}
+
+.NavArrow.disabled:hover {
+  transform: none !important;
+  background: #ccc !important;
 }
 
 .NavArrow:active {
@@ -493,27 +512,28 @@
 /* ========== RECORDING BAR ========== */
 .Recording-bar {
   position: absolute;
-  top: 16px;
+  top: 15px; /* Posición óptima */
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%); /* Centrada */
   z-index: 100;
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px; /* Espacio adecuado entre botones */
+  padding: 6px 12px; /* Padding balanceado */
   background: rgba(255, 255, 255, 0.95);
-  border-radius: 50px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 40px; /* Forma elegante */
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12); /* Sombra sutil pero visible */
 }
 
 .Recording-bar button {
-  width: 48px;
-  height: 48px;
+  width: 40px; /* Tamaño óptimo - ni muy grande ni muy pequeño */
+  height: 40px;
   border-radius: 50%;
-  border: 2px solid;
+  border: 1.5px solid; /* Borde visible pero no grueso */
   cursor: pointer;
   font-weight: bold;
+  font-size: 0.9rem; /* Tamaño de fuente legible */
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
@@ -556,6 +576,35 @@
 .Recording-bar .record-btn.active {
   background: #ff6b6b;
   border-color: #ff4757;
+  color: white;
+}
+
+.Recording-bar .record-btn.paused {
+  background: #ffa726;
+  border-color: #ff9800;
+  color: white;
+}
+
+.Recording-bar .pause-btn {
+  font-size: 1.2rem;
+  background: white;
+  border-color: #ddd;
+  color: #ffa726;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.Recording-bar .pause-btn.active {
+  background: #ffa726;
+  border-color: #ff9800;
   color: white;
 }
 
@@ -729,4 +778,221 @@
   background: #ff4757;
   border-color: #ff6b6b;
   color: #ffffff;
+}
+
+/* Botón de bloques de lectura */
+.Recording-bar .blocks-btn {
+  font-size: 1.4rem;
+  background: white;
+  border-color: #ddd;
+  color: #4834d4;
+  font-weight: bold;
+}
+
+.Recording-bar .blocks-btn.active {
+  background: #4834d4;
+  border-color: #3742fa;
+  color: white;
+  animation: pulse-blocks 2s infinite;
+}
+
+@keyframes pulse-blocks {
+  0%, 100% { 
+    box-shadow: 0 0 0 0 rgba(72, 52, 212, 0.7);
+  }
+  50% { 
+    box-shadow: 0 0 0 10px rgba(72, 52, 212, 0);
+  }
+}
+
+/* Estilos responsivos para la Recording-bar */
+@media (max-width: 768px) {
+  .Recording-bar {
+    top: 12px;
+    padding: 5px 10px;
+    gap: 5px;
+  }
+  
+  .Recording-bar button {
+    width: 36px;
+    height: 36px;
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .Recording-bar {
+    top: 10px;
+    padding: 4px 8px;
+    gap: 4px;
+    border-radius: 35px;
+  }
+  
+  .Recording-bar button {
+    width: 32px;
+    height: 32px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Modal de bloques */
+.Block-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+}
+
+.Block-modal {
+  background: white;
+  padding: 2rem;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.Block-modal h2 {
+  margin: 0 0 1rem;
+  color: #4834d4;
+  font-size: 1.5rem;
+}
+
+.Block-timestamp {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.Block-start-btn {
+  background: #4834d4;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 1rem;
+  transition: all 0.2s ease;
+}
+
+.Block-start-btn:hover {
+  background: #3742fa;
+  transform: translateY(-2px);
+}
+
+.Block-cancel-btn {
+  background: #ddd;
+  color: #666;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.Block-cancel-btn:hover {
+  background: #bbb;
+}
+
+/* Cronómetro de bloques */
+.Block-timer {
+  position: fixed;
+  z-index: 9998;
+  transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.Block-timer.center-position {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.Block-timer.bottom-position {
+  bottom: 20px;
+  right: 20px;
+  transform: none;
+}
+
+.Block-timer-content {
+  background: linear-gradient(135deg, #4834d4, #3742fa);
+  color: white;
+  padding: 1rem;
+  border-radius: 12px;
+  box-shadow: 0 8px 25px rgba(72, 52, 212, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 160px;
+  backdrop-filter: blur(10px);
+}
+
+.Block-timer.bottom-position .Block-timer-content {
+  flex-direction: row;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  min-width: auto;
+}
+
+.Block-number {
+  font-size: 0.8rem;
+  opacity: 0.9;
+  font-weight: 600;
+}
+
+.Block-time {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+}
+
+.Block-timer.bottom-position .Block-time {
+  font-size: 1.1rem;
+}
+
+.Block-remaining {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+.Block-timer.bottom-position .Block-remaining {
+  display: none;
+}
+
+/* Responsive para cronómetro */
+@media (max-width: 768px) {
+  .Block-timer.bottom-position {
+    bottom: 80px;
+    right: 10px;
+  }
+  
+  .Block-timer-content {
+    min-width: 140px;
+  }
+  
+  .Block-timer.bottom-position .Block-timer-content {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
 }

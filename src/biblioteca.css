@@ -1,3 +1,20 @@
+/* ============ IMPORTAR FUENTES INFANTILES ============ */
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600&family=Bubblegum+Sans&family=Comic+Neue:wght@300;400;700&display=swap');
+
+/* Reset global para evitar scroll horizontal */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto; /* Solo scroll cuando sea necesario */
+  max-width: 100vw;
+  height: 100%; /* Evitar scroll innecesario */
+}
+
 /* Animación de entrada */
 .fade-in {
   animation: fadeIn 1s ease-out;
@@ -14,15 +31,145 @@
   }
 }
 
-/* Composición general */
+/* Composición general - Sin scroll innecesario */
 .Biblioteca {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 3rem 1rem;
+  justify-content: flex-start;
+  padding: 1rem 1rem 1rem 1rem; /* Reducir padding inferior */
   min-height: 100vh;
-  background: linear-gradient(to bottom, #eaf6ff, #d0ecf7);
-  font-family: -apple-system, BlinkMacSystemFont, 'Comic Neue', sans-serif;
+  max-height: 100vh; /* Evitar desborde vertical */
+  max-width: 100vw; /* Evitar overflow horizontal */
+  /* Fondo: Paleta suave y relajante */
+  background: 
+    linear-gradient(to bottom,
+      #E8F4FD 0%,      /* Azul muy suave en el horizonte */
+      #F0F9FF 20%,     /* Azul hielo */
+      #FAFCFF 45%,     /* Casi blanco con tinte azul */
+      #FFFFFF 70%,     /* Blanco puro */
+      #FEFEFE 100%     /* Blanco cálido */
+    );
+  font-family: 'Fredoka', 'Comic Neue', cursive;
+  position: relative;
+  overflow-x: hidden; /* Asegurar no scroll horizontal */
+  overflow-y: hidden; /* Sin scroll vertical */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Mar de nubes con perspectiva - Colores suaves */
+.Biblioteca::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    /* Nubes lejanas en el horizonte (sutiles) */
+    radial-gradient(ellipse 40px 12px at 25% 15%, rgba(255,255,255,0.2) 0%, transparent 50%),
+    radial-gradient(ellipse 30px 10px at 75% 18%, rgba(255,255,255,0.15) 0%, transparent 50%),
+    radial-gradient(ellipse 35px 11px at 50% 20%, rgba(255,255,255,0.1) 0%, transparent 50%),
+    
+    /* Nubes medias (perspectiva media) */
+    radial-gradient(ellipse 80px 30px at 15% 35%, rgba(255,255,255,0.25) 0%, transparent 60%),
+    radial-gradient(ellipse 100px 35px at 85% 40%, rgba(255,255,255,0.2) 0%, transparent 60%),
+    radial-gradient(ellipse 90px 32px at 60% 45%, rgba(255,255,255,0.25) 0%, transparent 60%),
+    
+    /* Nubes cercanas (suaves y elegantes) */
+    radial-gradient(ellipse 160px 60px at 10% 70%, rgba(255,255,255,0.3) 0%, transparent 70%),
+    radial-gradient(ellipse 200px 80px at 90% 75%, rgba(255,255,255,0.25) 0%, transparent 70%),
+    radial-gradient(ellipse 140px 55px at 40% 80%, rgba(255,255,255,0.35) 0%, transparent 70%),
+    
+    /* Nubes muy cercanas (sutiles) */
+    radial-gradient(ellipse 250px 100px at 20% 90%, rgba(255,255,255,0.4) 0%, transparent 80%),
+    radial-gradient(ellipse 300px 120px at 80% 95%, rgba(255,255,255,0.3) 0%, transparent 80%);
+  
+  animation: cloudSeaFloat 30s ease-in-out infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@keyframes cloudSeaFloat {
+  0%, 100% { 
+    transform: translateX(0) translateY(0) scale(1); 
+    opacity: 1;
+  }
+  25% { 
+    transform: translateX(-15px) translateY(-8px) scale(1.02); 
+    opacity: 0.9;
+  }
+  50% { 
+    transform: translateX(10px) translateY(5px) scale(0.98); 
+    opacity: 0.95;
+  }
+  75% { 
+    transform: translateX(-8px) translateY(-3px) scale(1.01); 
+    opacity: 0.9;
+  }
+}
+
+/* Título principal mejorado - Más cerca de los libros */
+.Titulo-biblioteca-container {
+  text-align: center;
+  margin-bottom: 0.8rem; /* Reducir espacio para acercar libros */
+  margin-top: 0;         /* Sin espacio superior */
+  position: relative;
+  z-index: 2;
+}
+
+.Titulo-biblioteca {
+  font-size: 2.8rem;
+  color: #6B73FF; /* Violeta suave */
+  margin-bottom: 0;
+  text-align: center;
+  font-family: 'Bubblegum Sans', cursive; /* Fuente más infantil para el título principal */
+  font-weight: 400;
+  text-shadow: 2px 2px 8px rgba(255,255,255,0.8), 0 0 20px rgba(107, 115, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.Titulo-texto {
+  color: #6B73FF; /* Color sólido violeta suave */
+  letter-spacing: 1px;
+}
+
+.Titulo-nube {
+  font-size: 1.8rem;
+  animation: floatCloudSync 4s ease-in-out infinite;
+  opacity: 0.8;
+}
+
+.Titulo-nube:first-child {
+  animation-delay: 0s; /* Ambas nubes del título al mismo ritmo */
+}
+
+.Titulo-nube:last-child {
+  animation-delay: 0s; /* Sin delay, mismo ritmo que la primera */
+}
+
+@keyframes floatCloudSync {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+@media (max-width: 768px) {
+  .Biblioteca {
+    padding: 1rem 0.5rem;
+  }
+  
+  .Titulo-biblioteca {
+    font-size: 2rem;
+    gap: 0.5rem;
+  }
+  
+  .Titulo-nube {
+    font-size: 1.5rem;
+  }
 }
 
 /* Botones de nivel */
@@ -58,37 +205,82 @@
   box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
 
-/* Contenedor de nubes y libros */
+/* Contenedor de nubes y libros - Más cerca del título */
 .Contenedor-nubes {
-  margin-top: -9rem; /* 🔼 sube todo el bloque de nubes */
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   width: 100%;
-  margin-top: -1rem; /* nuevo: sube todo el bloque */
-  max-width: 1200px;
-  position: relative; /* necesario para posicionar las flechas laterales */
+  max-width: 1400px;
+  position: relative;
+  margin: 0 auto 2rem auto; /* Reducir margen inferior */
+  padding: 0 2rem 1rem 2rem; /* Reducir padding */
 }
 
-/* Grilla de libros: 3 columnas × 2 filas */
+/* Grilla de libros: más cerca del título */
 .Nubes-blancas {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, 1fr); /* 3 columnas en desktop */
   grid-template-rows: auto auto;
   gap: 1.8rem;
   justify-items: center;
   align-items: start;
   width: 100%;
-  max-width: 1200px;
+  max-width: calc(100vw - 4rem); /* Evitar overflow */
   position: relative;
-  z-index: 1; /* abajo respecto a controles flotantes */
-  padding-bottom: 6rem; /* espacio para que las flechas queden separadas de las nubes */
-  /* dejar márgenes laterales internos para que las flechas no ocupen el hitbox del grid */
-  padding-left: 96px; /* espacio para la flecha izquierda */
-  padding-right: 96px; /* espacio para la flecha derecha */
+  z-index: 1;
+  padding: 0.5rem 80px 4rem 80px; /* Reducir padding superior */
+  margin: 0 auto; /* centrar la grilla */
+  box-sizing: border-box;
+  overflow: visible; /* Permitir que títulos sobresalgan */
 }
 
-/* Cada libro en su nube */
+/* Tablets */
+@media (max-width: 1024px) {
+  .Nubes-blancas {
+    grid-template-columns: repeat(2, 1fr); /* 2 columnas en tablet */
+    grid-template-rows: auto auto auto; /* 3 filas para 6 elementos */
+    gap: 1.5rem;
+    max-width: calc(100vw - 3rem); /* Evitar overflow */
+    padding: 1rem 60px 5rem 60px; /* Menos padding lateral */
+    box-sizing: border-box;
+  }
+}
+
+/* Móviles: 2 columnas (mejor aprovechamiento del espacio) */
+@media (max-width: 768px) {
+  .navbar-biblioteca {
+    padding: 0.8rem 1rem;
+    margin-bottom: 1rem; /* reducir margen en mobile */
+  }
+  
+  .library-container {
+    padding-top: 0.5rem; /* reducir espacio superior en mobile */
+  }
+  
+  .Nubes-blancas {
+    grid-template-columns: repeat(2, 1fr); /* 2 columnas en móvil */
+    grid-template-rows: repeat(3, auto); /* 3 filas para 6 elementos */
+    gap: 1.2rem;
+    max-width: calc(100vw - 2rem); /* Evitar overflow en mobile */
+    padding: 0.5rem 40px 5rem 40px; /* Menos padding pero más espacio inferior */
+    box-sizing: border-box;
+  }
+}
+
+/* Móviles pequeños: 2 columnas compactas pero visibles */
+@media (max-width: 480px) {
+  .Nubes-blancas {
+    grid-template-columns: repeat(2, 1fr); /* mantener 2 columnas */
+    padding: 1rem 30px 6rem 30px; /* Más espacio inferior para títulos */
+    gap: 1rem;
+    max-width: calc(100vw - 1rem); /* Evitar overflow */
+    box-sizing: border-box;
+  }
+}
+
+/* Cada libro en su nube - Contenedor mejorado */
 .Libro-nube {
   position: relative;
   display: flex;
@@ -96,8 +288,28 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  min-height: 280px;
-  padding-bottom: 1rem;
+  min-height: 320px; /* Más altura para títulos */
+  padding-bottom: 2rem; /* Espacio para título flotante */
+  width: 100%;
+  max-width: 300px;
+  overflow: visible; /* Permitir que título sobresalga */
+}
+
+/* Responsive para libro-nube */
+@media (max-width: 768px) {
+  .Libro-nube {
+    min-height: 280px; /* Ajustar altura en mobile */
+    max-width: 250px;
+    padding-bottom: 2.5rem; /* Más espacio en mobile */
+  }
+}
+
+@media (max-width: 480px) {
+  .Libro-nube {
+    min-height: 260px; /* Compacto pero funcional */
+    max-width: 220px;
+    padding-bottom: 2.5rem;
+  }
 }
 
 /* elevar segunda fila */
@@ -105,7 +317,7 @@
   margin-top: -1.5rem;
 }
 
-/* Nube blanca flotante */
+/* Nube blanca flotante con animaciones individuales */
 .Nube-blanca {
   --float-duration: 4s;
   --float-delay: 0s;
@@ -115,14 +327,111 @@
   width: 260px;
   height: 200px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 0.6rem;
-  /* combinamos fade-in + flotación (usa variables inyectadas por JS) */
   opacity: 0;
   animation: fadeInCloud 0.45s ease-out forwards, flotar var(--float-duration) ease-in-out infinite var(--float-delay);
   transition: transform 0.3s ease;
-  margin-bottom: -0.9rem; /* sube la nube respecto al título */
+  margin-bottom: -0.9rem;
+  position: relative;
+}
+
+/* Animaciones diferenciadas por posición */
+.Nube-blanca:nth-child(1) {
+  --float-duration: 3.5s;
+  --float-delay: 0s;
+  animation: fadeInCloud 0.45s ease-out forwards, float1 3.5s ease-in-out infinite;
+}
+
+.Nube-blanca:nth-child(2) {
+  --float-duration: 4.2s;
+  --float-delay: 0.8s;
+  animation: fadeInCloud 0.45s ease-out forwards, float2 4.2s ease-in-out infinite 0.8s;
+}
+
+.Nube-blanca:nth-child(3) {
+  --float-duration: 3.8s;
+  --float-delay: 1.6s;
+  animation: fadeInCloud 0.45s ease-out forwards, float3 3.8s ease-in-out infinite 1.6s;
+}
+
+.Nube-blanca:nth-child(4) {
+  --float-duration: 4.5s;
+  --float-delay: 0.4s;
+  animation: fadeInCloud 0.45s ease-out forwards, float4 4.5s ease-in-out infinite 0.4s;
+}
+
+.Nube-blanca:nth-child(5) {
+  --float-duration: 3.9s;
+  --float-delay: 1.2s;
+  animation: fadeInCloud 0.45s ease-out forwards, float5 3.9s ease-in-out infinite 1.2s;
+}
+
+.Nube-blanca:nth-child(6) {
+  --float-duration: 4.1s;
+  --float-delay: 2.0s;
+  animation: fadeInCloud 0.45s ease-out forwards, float6 4.1s ease-in-out infinite 2.0s;
+}
+
+/* Responsive para nubes */
+@media (max-width: 1024px) {
+  .Nube-blanca {
+    width: 240px;
+    height: 180px;
+  }
+}
+
+@media (max-width: 768px) {
+  .Nube-blanca {
+    width: 220px;
+    height: 160px;
+  }
+}
+
+@media (max-width: 480px) {
+  .Nube-blanca {
+    width: 200px;
+    height: 140px;
+    padding: 0.4rem;
+  }
+}
+
+/* Animaciones de flotado diferenciadas */
+@keyframes float1 {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-12px) rotate(1deg); }
+}
+
+@keyframes float2 {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  30% { transform: translateY(-8px) rotate(-0.5deg); }
+  70% { transform: translateY(-15px) rotate(0.5deg); }
+}
+
+@keyframes float3 {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  25% { transform: translateY(-6px) rotate(1deg); }
+  75% { transform: translateY(-10px) rotate(-1deg); }
+}
+
+@keyframes float4 {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  40% { transform: translateY(-14px) rotate(0.8deg); }
+  80% { transform: translateY(-7px) rotate(-0.8deg); }
+}
+
+@keyframes float5 {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  35% { transform: translateY(-9px) rotate(-1.2deg); }
+  65% { transform: translateY(-13px) rotate(1.2deg); }
+}
+
+@keyframes float6 {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  45% { transform: translateY(-11px) rotate(0.7deg); }
+  85% { transform: translateY(-8px) rotate(-0.7deg); }
 }
 
 @keyframes flotar {
@@ -136,25 +445,107 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Título se mueve en sincronía con la nube cuando se le aplica animación */
+/* Título sincronizado con cada nube - Perfectamente centrado */
 .Titulo-libro {
-  font-size: 0.98rem;
-  margin-top: 0.1rem;
-  max-width: 170px;
-  color: #0e2f33;
-  font-weight: 600;
+  font-size: 1rem;
+  margin: 0.8rem auto 0 auto; /* Centrado perfecto */
+  max-width: 180px;
+  color: #5C6BC0; /* Índigo suave */
+  font-family: 'Fredoka', cursive; /* Fuente infantil */
+  font-weight: 400;
   text-align: center;
-  line-height: 1.25;
-  /* título también hace fade-in y flota sincronizado por variables */
+  line-height: 1.3;
   opacity: 0;
-  animation: fadeInTitle 0.45s ease-out forwards, titleFloat var(--float-duration) ease-in-out infinite var(--float-delay);
+  text-shadow: 1px 1px 3px rgba(255,255,255,0.8);
+  animation: fadeInTitle 0.45s ease-out forwards;
+  position: static; /* Centrado natural */
+  width: 100%;
+}
+
+/* Sincronización con animaciones de nubes - Simplificada */
+.Nube-blanca:nth-child(1) .Titulo-libro {
+  animation: fadeInTitle 0.45s ease-out forwards, titleFloat1 3.5s ease-in-out infinite;
+}
+
+.Nube-blanca:nth-child(2) .Titulo-libro {
+  animation: fadeInTitle 0.45s ease-out forwards, titleFloat2 4.2s ease-in-out infinite 0.8s;
+}
+
+.Nube-blanca:nth-child(3) .Titulo-libro {
+  animation: fadeInTitle 0.45s ease-out forwards, titleFloat3 3.8s ease-in-out infinite 1.6s;
+}
+
+.Nube-blanca:nth-child(4) .Titulo-libro {
+  animation: fadeInTitle 0.45s ease-out forwards, titleFloat4 4.5s ease-in-out infinite 0.4s;
+}
+
+.Nube-blanca:nth-child(5) .Titulo-libro {
+  animation: fadeInTitle 0.45s ease-out forwards, titleFloat5 3.9s ease-in-out infinite 1.2s;
+}
+
+.Nube-blanca:nth-child(6) .Titulo-libro {
+  animation: fadeInTitle 0.45s ease-out forwards, titleFloat6 4.1s ease-in-out infinite 2.0s;
+}
+
+/* Responsive para títulos - Mejor posicionamiento */
+@media (max-width: 768px) {
+  .Titulo-libro {
+    font-size: 0.9rem;
+    max-width: 160px;
+    line-height: 1.2;
+    margin-top: 0.6rem; /* Más cerca en tablet */
+  }
+}
+
+@media (max-width: 480px) {
+  .Titulo-libro {
+    font-size: 0.85rem;
+    max-width: 150px;
+    margin-top: 0.4rem; /* Más cerca en móvil */
+    line-height: 1.1;
+  }
+}
+
+/* Animaciones sincronizadas para títulos - Centradas y simples */
+@keyframes titleFloat1 {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes titleFloat2 {
+  0%, 100% { transform: translateY(0px); }
+  30% { transform: translateY(-6px); }
+  70% { transform: translateY(-10px); }
+}
+
+@keyframes titleFloat3 {
+  0%, 100% { transform: translateY(0px); }
+  25% { transform: translateY(-4px); }
+  75% { transform: translateY(-7px); }
+}
+
+@keyframes titleFloat4 {
+  0%, 100% { transform: translateY(0px); }
+  40% { transform: translateY(-9px); }
+  80% { transform: translateY(-5px); }
+}
+
+@keyframes titleFloat5 {
+  0%, 100% { transform: translateY(0px); }
+  35% { transform: translateY(-6px); }
+  65% { transform: translateY(-8px); }
+}
+
+@keyframes titleFloat6 {
+  0%, 100% { transform: translateY(0px); }
+  45% { transform: translateY(-7px); }
+  85% { transform: translateY(-5px); }
 }
 
 @keyframes titleFloat {
   0% { transform: translateY(0px); }
   50% { transform: translateY(-8px); }
   100% { transform: translateY(0px); }
-
 }
 
 @keyframes fadeInTitle {
@@ -171,23 +562,79 @@
   justify-items: center;
   align-items: start;
   width: 100%;
-  max-width: 1000px;
-  padding-bottom: 3rem;
+  max-width: calc(100vw - 4rem); /* Evitar overflow */
+  padding-bottom: 6rem; /* Más espacio para evitar cortes */
 }
+
+/* Responsive para skeleton grid */
+@media (max-width: 1024px) {
+  .Skeleton-grid {
+    grid-template-columns: repeat(2, 1fr); /* 2 columnas en tablet */
+    grid-template-rows: auto auto auto; /* 3 filas para 6 elementos */
+    gap: 1.5rem;
+    max-width: calc(100vw - 3rem); /* Evitar overflow */
+  }
+}
+
+@media (max-width: 768px) {
+  .Skeleton-grid {
+    grid-template-columns: repeat(2, 1fr); /* 2 columnas en móvil también */
+    grid-template-rows: repeat(3, auto); /* 3 filas para 6 elementos */
+    gap: 1.2rem;
+    max-width: calc(100vw - 2rem); /* Evitar overflow */
+  }
+}
+
 .Skeleton-card {
   width: 260px;
   height: 200px;
-  border-radius: 14px;
-  background: linear-gradient(90deg, #d8eef8 0%, #c7e9f6 50%, #d8eef8 100%);
-  border: 1px solid rgba(6,30,34,0.04);
-  box-shadow: 0 6px 18px rgba(5,32,36,0.04);
+  border-radius: 16px;
+  background: linear-gradient(90deg, #F0F4FF 0%, #E8F2FF 50%, #F0F4FF 100%);
+  border: 1px solid rgba(139, 157, 195, 0.1);
+  box-shadow: 0 4px 12px rgba(139, 157, 195, 0.08);
   background-size: 200% 100%;
-  animation: shimmer 1.6s linear infinite;
+  animation: shimmerSoft 2s linear infinite;
   margin-bottom: -0.9rem;
   opacity: 1 !important;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+@keyframes shimmerSoft {
+  0% {
+    background-position: -200% 0;
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    background-position: 200% 0;
+    opacity: 0.8;
+  }
+}
+
+/* Responsive para skeleton cards */
+@media (max-width: 1024px) {
+  .Skeleton-card {
+    width: 240px;
+    height: 180px;
+  }
+}
+
+@media (max-width: 768px) {
+  .Skeleton-card {
+    width: 220px;
+    height: 160px;
+  }
+}
+
+@media (max-width: 480px) {
+  .Skeleton-card {
+    width: 200px;
+    height: 140px;
+  }
 }
 .Nube-blanca.Skeleton-card {
   /* cuando mostramos placeholder, queremos que la nube no esté oculta por fade-in */
@@ -218,6 +665,19 @@
 
 .Portada:hover {
   transform: scale(1.05);
+}
+
+/* Responsive para portadas */
+@media (max-width: 768px) {
+  .Portada {
+    width: 90px; /* Tamaño adecuado para 2 columnas en móvil */
+  }
+}
+
+@media (max-width: 480px) {
+  .Portada {
+    width: 80px; /* Tamaño compacto para móviles pequeños */
+  }
 }
 /* (Titulo-libro definido arriba with animation & styles) */
 
@@ -264,12 +724,73 @@
   100% { transform: translateY(-150px) translateX(0) rotate(0deg); opacity: 0; }
 }
 
-/* Flechas de navegación */
+/* Responsive para nubes soplonas */
+@media (max-width: 1024px) {
+  .Nube-cian {
+    max-width: 100px;
+    max-height: 100px;
+  }
+}
 
+@media (max-width: 768px) {
+  .Nube-cian {
+    max-width: 80px;
+    max-height: 80px;
+  }
+  
+  @keyframes soplarIzquierda {
+    0% { transform: translateY(-120px) translateX(0) rotate(0deg); opacity: 0; }
+    20% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+    40% { transform: translateY(0) translateX(30px) rotate(15deg); }
+    50% { transform: translateY(0) translateX(30px) rotate(-15deg); }
+    60% { transform: translateY(0) translateX(30px) rotate(15deg); }
+    70% { transform: translateY(0) translateX(30px) rotate(0deg); }
+    100% { transform: translateY(-120px) translateX(0) rotate(0deg); opacity: 0; }
+  }
+  
+  @keyframes soplarDerecha {
+    0% { transform: translateY(-120px) translateX(0) rotate(0deg); opacity: 0; }
+    20% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+    40% { transform: translateY(0) translateX(-30px) rotate(-15deg); }
+    50% { transform: translateY(0) translateX(-30px) rotate(15deg); }
+    60% { transform: translateY(0) translateX(-30px) rotate(-15deg); }
+    70% { transform: translateY(0) translateX(-30px) rotate(0deg); }
+    100% { transform: translateY(-120px) translateX(0) rotate(0deg); opacity: 0; }
+  }
+}
+
+@media (max-width: 480px) {
+  .Nube-cian {
+    max-width: 60px;
+    max-height: 60px;
+  }
+  
+  @keyframes soplarIzquierda {
+    0% { transform: translateY(-100px) translateX(0) rotate(0deg); opacity: 0; }
+    20% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+    40% { transform: translateY(0) translateX(20px) rotate(10deg); }
+    50% { transform: translateY(0) translateX(20px) rotate(-10deg); }
+    60% { transform: translateY(0) translateX(20px) rotate(10deg); }
+    70% { transform: translateY(0) translateX(20px) rotate(0deg); }
+    100% { transform: translateY(-100px) translateX(0) rotate(0deg); opacity: 0; }
+  }
+  
+  @keyframes soplarDerecha {
+    0% { transform: translateY(-100px) translateX(0) rotate(0deg); opacity: 0; }
+    20% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+    40% { transform: translateY(0) translateX(-20px) rotate(-10deg); }
+    50% { transform: translateY(0) translateX(-20px) rotate(10deg); }
+    60% { transform: translateY(0) translateX(-20px) rotate(-10deg); }
+    70% { transform: translateY(0) translateX(-20px) rotate(0deg); }
+    100% { transform: translateY(-100px) translateX(0) rotate(0deg); opacity: 0; }
+  }
+}
+
+/* Flechas de navegación - Mejoradas para mar de nubes */
 .Flechas-navegacion {
   /* colocar las dos flechas a los laterales, fuera del área activa del grid */
   position: absolute;
-  top: 50%;
+  top: 40%; /* Ajustar posición vertical */
   left: 0;
   right: 0;
   transform: translateY(-50%);
@@ -286,14 +807,21 @@
   height: 72px;
   cursor: pointer;
   transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.95); /* Fondo más sutil */
+  border-radius: 50%;
+  box-shadow: 0 3px 8px rgba(139, 157, 195, 0.15); /* Sombra más suave */
+  backdrop-filter: blur(8px); /* Efecto de cristal suave */
+  border: 1px solid rgba(139, 157, 195, 0.1);
   pointer-events: auto; /* solo las flechas reciben clicks */
   will-change: transform;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* posicionar flechas fuera del hitbox del grid */
-.Flechas-navegacion .Flecha:first-of-type { left: -72px; }
-.Flechas-navegacion .Flecha:last-of-type { right: -72px; }
+/* posicionar flechas DENTRO del área visible */
+.Flechas-navegacion .Flecha:first-of-type { left: 20px; }
+.Flechas-navegacion .Flecha:last-of-type { right: 20px; }
 
 /* hover: crecer */
 .Flechas-navegacion .Flecha:hover {
@@ -319,11 +847,32 @@
   100% { transform: translateY(-50%) scale(1.15); }
 }
 
-@media (max-width: 900px) {
-  .Nubes-blancas { padding-left: 56px; padding-right: 56px; }
-  .Flechas-navegacion .Flecha { width: 56px; height: 56px; }
-  .Flechas-navegacion .Flecha:first-of-type { left: -56px; }
-  .Flechas-navegacion .Flecha:last-of-type { right: -56px; }
+/* Responsive para flechas - SIEMPRE VISIBLES */
+@media (max-width: 1024px) {
+  .Flechas-navegacion .Flecha { width: 64px; height: 64px; }
+  .Flechas-navegacion .Flecha:first-of-type { left: 15px; }
+  .Flechas-navegacion .Flecha:last-of-type { right: 15px; }
+}
+
+/* Mobile: flechas pequeñas pero visibles */
+@media (max-width: 768px) {
+  .Flechas-navegacion .Flecha { width: 44px; height: 44px; }
+  .Flechas-navegacion .Flecha:first-of-type { left: 10px; }
+  .Flechas-navegacion .Flecha:last-of-type { right: 10px; }
+}
+
+/* Small mobile: flechas mínimas pero siempre visibles */
+@media (max-width: 480px) {
+  .Flechas-navegacion .Flecha { width: 36px; height: 36px; }
+  .Flechas-navegacion .Flecha:first-of-type { left: 8px; }
+  .Flechas-navegacion .Flecha:last-of-type { right: 8px; }
+}
+
+/* Extra small mobile: flechas compactas pero funcionales */
+@media (max-width: 360px) {
+  .Flechas-navegacion .Flecha { width: 32px; height: 32px; }
+  .Flechas-navegacion .Flecha:first-of-type { left: 5px; }
+  .Flechas-navegacion .Flecha:last-of-type { right: 5px; }
 }
 
 .Flecha.animable:active {

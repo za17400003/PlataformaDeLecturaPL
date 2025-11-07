@@ -15,96 +15,72 @@ function Biblioteca() {
   const [nubeActiva, setNubeActiva] = useState(null);
   const [deslizarDireccion, setDeslizarDireccion] = useState(null);
   const [paginaActual, setPaginaActual] = useState(0);
-  const [libroSeleccionado, setLibroSeleccionado] = useState(null); // agregado: libro abierto
+  const [libroSeleccionado, setLibroSeleccionado] = useState(null);
+  const [cargandoPortadas, setCargandoPortadas] = useState(false);
+  const [paginationInfo, setPaginationInfo] = useState(null);
   const librosPorPagina = 6;
 
   useEffect(() => {
-    const cargarLibros = async () => {
-      console.log('Solicitando lista de libros al servidor...');
+    const cargarPagina = async (pageNumber) => {
+      console.log(`Cargando página ${pageNumber}...`);
+      setCargandoPortadas(true);
+      
       try {
-  const res = await fetch('http://localhost:3001/api/libros');
-        console.log('Respuesta recibida:', res.status);
-        console.log('Headers:', res.headers);
-
+        const res = await fetch(`/api/libros?page=${pageNumber}&limit=${librosPorPagina}`);
+        
         if (!res.ok) {
           throw new Error(`Error del servidor: ${res.status}`);
         }
 
-        const data = await res.text();
-        console.log('Respuesta cruda:', data);
+        const data = await res.json();
+        console.log('Datos recibidos:', data);
 
-        if (!data) {
-          console.error('Respuesta vacía del servidor');
-          return;
-        }
+        setLibros(data.books || []);
+        setPaginationInfo(data.pagination);
+        
+        // Cargar solo las portadas de los libros de esta página
+        const resultados = await Promise.all(
+          (data.books || []).map(async (libro) => {
+            try {
+              console.log('Cargando libro:', libro.archivo);
+              const epub = ePub(libro.archivo);
+              await epub.ready;
 
-        const json = JSON.parse(data);
-        console.log('Libros cargados:', json);
+              let tituloReal = libro.titulo;
+              let portada = null;
 
-        if (Array.isArray(json)) {
-          setLibros(json);
-        } else {
-          console.error('Formato de respuesta inesperado:', json);
-        }
+              try {
+                tituloReal = epub.package?.metadata?.title || libro.titulo;
+                const coverUrl = await epub.loaded.cover;
+                
+                if (coverUrl) {
+                  portada = await epub.archive.createUrl(coverUrl, { base64: true });
+                  console.log('Portada cargada para:', libro.titulo);
+                }
+              } catch (error) {
+                console.error('Error al cargar metadatos/portada:', error);
+              }
+
+              return { titulo: tituloReal, portada, archivo: libro.archivo };
+            } catch (error) {
+              console.error(`Error al cargar ${libro.archivo}:`, error);
+              return { titulo: libro.titulo, portada: null, archivo: libro.archivo };
+            }
+          })
+        );
+        
+        setPortadas(resultados);
       } catch (err) {
-        console.error('Error al obtener libros:', err);
+        console.error('Error al cargar página:', err);
         setLibros([]);
+        setPortadas([]);
+      } finally {
+        setCargandoPortadas(false);
       }
     };
 
-    cargarLibros();
-  }, []);
-
-  useEffect(() => {
-    const cargarPortadasYTitulos = async () => {
-      const resultados = await Promise.all(
-        libros.map(async (libro) => {
-          try {
-            console.log('Intentando cargar libro:', libro.archivo);
-            const epub = ePub(libro.archivo);
-            
-            try {
-              await epub.ready;
-              console.log('Libro cargado correctamente:', libro.titulo);
-            } catch (error) {
-              console.error('Error en epub.ready:', error);
-              throw error;
-            }
-
-            let tituloReal = libro.titulo;
-            let portada = null;
-
-            try {
-              tituloReal = epub.package?.metadata?.title || libro.titulo;
-              const coverUrl = await epub.loaded.cover;
-              
-              if (coverUrl) {
-                portada = await epub.archive.createUrl(coverUrl, { base64: true });
-                console.log('Portada cargada para:', libro.titulo);
-              }
-            } catch (error) {
-              console.error('Error al cargar metadatos/portada:', error);
-            }
-
-            return { titulo: tituloReal, portada, archivo: libro.archivo };
-          } catch (error) {
-            console.error(`Error al cargar ${libro.archivo}:`, error);
-            return { titulo: libro.titulo, portada: null, archivo: libro.archivo };
-          }
-        })
-      );
-      setPortadas(resultados);
-    };
-
-    if (libros.length > 0) {
-      cargarPortadasYTitulos();
-    }
-  }, [libros]);
-
-  const librosVisibles = portadas.slice(
-    paginaActual * librosPorPagina,
-    (paginaActual + 1) * librosPorPagina
-  );
+    cargarPagina(paginaActual);
+  }, [paginaActual, librosPorPagina]);
 
   const activarAnimacion = (direccion) => {
     setNubeActiva(direccion);
@@ -115,38 +91,42 @@ function Biblioteca() {
   };
 
   const avanzarPagina = () => {
-    setDeslizarDireccion('derecha');
-    activarAnimacion('izquierda');
-    setTimeout(() => {
-      setPaginaActual(prev => {
-        const totalPaginas = Math.ceil(portadas.length / librosPorPagina);
-        return prev + 1 >= totalPaginas ? 0 : prev + 1;
-      });
-    }, 1200);
+    if (paginationInfo && paginationInfo.hasNextPage) {
+      setDeslizarDireccion('derecha');
+      activarAnimacion('izquierda');
+      setTimeout(() => {
+        setPaginaActual(prev => prev + 1);
+      }, 1200);
+    }
   };
 
   const retrocederPagina = () => {
-    setDeslizarDireccion('izquierda');
-    activarAnimacion('derecha');
-    setTimeout(() => {
-      setPaginaActual(prev => {
-        const totalPaginas = Math.ceil(portadas.length / librosPorPagina);
-        return prev - 1 < 0 ? totalPaginas - 1 : prev - 1;
-      });
-    }, 1200);
+    if (paginationInfo && paginationInfo.hasPrevPage) {
+      setDeslizarDireccion('izquierda');
+      activarAnimacion('derecha');
+      setTimeout(() => {
+        setPaginaActual(prev => prev - 1);
+      }, 1200);
+    }
   };
 
   console.log('Estado actual:', {
     libros: libros.length,
     portadas: portadas.length,
-    librosPorPagina,
     paginaActual,
-    librosVisibles: librosVisibles.length
+    paginationInfo,
+    cargandoPortadas
   });
 
   return (
     <div className="Biblioteca fade-in">
-      <h2 className="Titulo-biblioteca">📚 Biblioteca</h2>
+      <div className="Titulo-biblioteca-container">
+        <h2 className="Titulo-biblioteca">
+          <span className="Titulo-nube">☁️</span>
+          <span className="Titulo-texto">Biblioteca</span>
+          <span className="Titulo-nube">☁️</span>
+        </h2>
+      </div>
 
       <div className="Contenedor-nubes">
         {nubeActiva === 'izquierda' && (
@@ -166,7 +146,7 @@ function Biblioteca() {
 
         <div className="Nubes-blancas">
           {/* Skeleton placeholders mientras se cargan los libros */}
-          {portadas.length === 0 && (
+          {cargandoPortadas && (
             <>
               {Array.from({ length: librosPorPagina }).map((_, i) => (
                 <div key={`sk-${i}`} className="Libro-nube" style={{ cursor: 'default', '--float-duration': '4s', '--float-delay': '0s' }}>
@@ -178,7 +158,7 @@ function Biblioteca() {
             </>
           )}
 
-          {portadas.length > 0 && librosVisibles.map((libro, index) => {
+          {!cargandoPortadas && portadas.length > 0 && portadas.map((libro, index) => {
             const duration = 4 + (index % 3);
             const delay = (index % 3) * 0.15;
             return (

@@ -9,7 +9,7 @@ const http = require('http');
 const { exec } = require('child_process');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -34,6 +34,8 @@ let gazepointClient = null;
 let reconnectTimer = null;
 let reconnectAttempts = 0;
 let currentRecordingPath = null;
+let currentRecordingFolder = null;
+let currentSessionId = null; // Agregar sessionId
 let txtStream = null;
 let gazepointStream = null;
 let headerWritten = false;
@@ -132,9 +134,9 @@ wss.on('connection', (ws) => {
       const data = JSON.parse(message);
 
       if (data.type === 'START_RECORDING') {
-        // Generar timestamp del servidor (sistema local)
-        const serverTimestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
-        const recordingFolderName = serverTimestamp;
+        // Usar el sessionId proporcionado o generar uno nuevo
+        const sessionId = data.sessionId || new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
+        const recordingFolderName = sessionId.replace('Z', ''); // Limpiar si viene con Z
         const recordingFolder = path.join(recordingsDir, recordingFolderName);
         
         try {
@@ -144,6 +146,8 @@ wss.on('connection', (ws) => {
         }
         
         currentRecordingPath = path.join(recordingFolder, 'data');
+        currentRecordingFolder = recordingFolder;
+        currentSessionId = sessionId; // Guardar el sessionId
         headerWritten = false;
         txtStream = fs.createWriteStream(`${currentRecordingPath}.rtf`);
         gazepointStream = fs.createWriteStream(`${currentRecordingPath}.gp3`);
@@ -151,12 +155,14 @@ wss.on('connection', (ws) => {
         const isoTimestamp = new Date().toISOString();
         txtStream.write(`# Eye tracking recording\n# started_at=${isoTimestamp}\n# host=${GP_HOST}\n# port=${GP_PORT}\n`);
         gazepointStream.write(`Recording started at: ${isoTimestamp}\n`);
-        console.log(`[gazepoint] Grabación iniciada en: ${recordingFolder}`);
+        console.log(`[gazepoint] Grabación iniciada en: ${recordingFolder} para sesión: ${sessionId}`);
       } else if (data.type === 'STOP_RECORDING') {
         if (txtStream) { try { txtStream.end(); } catch(_) {} txtStream = null; }
         if (gazepointStream) { try { gazepointStream.end(); } catch(_) {} gazepointStream = null; }
-        console.log(`[gazepoint] Grabación finalizada`);
+        console.log(`[gazepoint] Grabación finalizada para sesión:`, currentSessionId);
         currentRecordingPath = null;
+        currentRecordingFolder = null;
+        currentSessionId = null; // Limpiar también el sessionId
         headerWritten = false;
       }
     } catch (e) {
@@ -195,13 +201,19 @@ app.use(express.static(path.join(__dirname, 'build')));
 app.get('/api/libros', (req, res) => {
   console.log('Solicitud recibida para /api/libros');
   
+  // Parámetros de paginación
+  const page = parseInt(req.query.page) || 0;
+  const limit = parseInt(req.query.limit) || 6;
+  const startIndex = page * limit;
+  const endIndex = startIndex + limit;
+  
   fs.readdir(librosPath, (err, files) => {
     if (err) {
       console.error('Error al leer la carpeta de libros:', err);
       return res.status(500).json({ error: 'Error al leer la carpeta de libros', details: err.message });
     }
     
-    const epubs = files
+    const allEpubs = files
       .filter(file => file.toLowerCase().endsWith('.epub'))
       .map(file => {
         const absolutePath = path.join(librosPath, file);
@@ -209,51 +221,66 @@ app.get('/api/libros', (req, res) => {
         
         return {
           titulo: file.replace(/\.epub$/i, ''),
-          archivo: `http://localhost:3001/public/libros/${file}`,
+          archivo: `/public/libros/${file}`,
           size: stats.size,
           lastModified: stats.mtime
         };
       });
     
-    console.log('Libros encontrados:', epubs.length);
-    res.json(epubs);
+    // Calcular metadatos de paginación
+    const totalBooks = allEpubs.length;
+    const totalPages = Math.ceil(totalBooks / limit);
+    const paginatedBooks = allEpubs.slice(startIndex, endIndex);
+    
+    console.log(`Página ${page}, libros ${startIndex + 1}-${Math.min(endIndex, totalBooks)} de ${totalBooks} total`);
+    
+    res.json({
+      books: paginatedBooks,
+      pagination: {
+        currentPage: page,
+        totalPages: totalPages,
+        totalBooks: totalBooks,
+        booksPerPage: limit,
+        hasNextPage: page < totalPages - 1,
+        hasPrevPage: page > 0
+      }
+    });
   });
 });
 
 // ============ FUNCIONES AUXILIARES ============
-function convertWebmToAvi(webmPath) {
-  return new Promise((resolve, reject) => {
-    // Cambiar a WMV que es el formato nativo de Gazepoint
-    const wmvPath = webmPath.replace(/\.webm$/, '.wmv');
-    const command = `ffmpeg -i "${webmPath}" -c:v wmv2 -q:v 5 -c:a wmav2 -b:a 192k "${wmvPath}"`;
-    
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        console.error('Error converting webm to wmv:', error);
-        reject(error);
-      } else {
-        // Eliminar el webm original
-        try {
-          fs.unlinkSync(webmPath);
-          console.log('Conversión a WMV completada:', wmvPath);
-          resolve(wmvPath);
-        } catch (e) {
-          console.error('Error eliminando webm:', e);
-          resolve(wmvPath);
-        }
-      }
-    });
-  });
+function findSessionFolder(sessionId) {
+  const sessionFolderName = sessionId.replace('Z', '');
+  const sessionFolder = path.join(recordingsDir, sessionFolderName);
+  if (fs.existsSync(sessionFolder)) {
+    return sessionFolder;
+  }
+  return null;
 }
 
 // ============ MULTER: UPLOAD ============
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Si hay grabación activa, guardar en esa carpeta
-    if (currentRecordingPath) {
-      const folder = path.dirname(currentRecordingPath);
-      cb(null, folder);
+    // Si hay sessionId en el request, buscar o crear la carpeta correspondiente
+    const sessionId = req.body?.sessionId;
+    if (sessionId) {
+      const sessionFolderName = sessionId.replace('Z', '');
+      const sessionFolder = path.join(recordingsDir, sessionFolderName);
+      
+      // Crear la carpeta si no existe
+      try {
+        fs.mkdirSync(sessionFolder, { recursive: true });
+        console.log('Guardando video en carpeta de sesión:', sessionFolder);
+        cb(null, sessionFolder);
+      } catch (e) {
+        console.error('Error creando carpeta de sesión:', e);
+        cb(null, recordingsDir);
+      }
+    } else if (currentRecordingFolder) {
+      console.log('Guardando video en carpeta de grabación activa:', currentRecordingFolder);
+      cb(null, currentRecordingFolder);
     } else {
+      console.log('No hay sesión específica, guardando en carpeta general');
       cb(null, recordingsDir);
     }
   },
@@ -271,25 +298,15 @@ app.post('/api/upload', upload.single('video'), async (req, res) => {
   }
   
   try {
-    console.log('Archivo recibido:', req.file.path);
+    console.log('Archivo recibido (formato original):', req.file.path);
     
-    // Si es webm, convertir a wmv (formato nativo de Gazepoint)
-    if (req.file.path.endsWith('.webm')) {
-      const wmvPath = await convertWebmToAvi(req.file.path);
-      console.log('Conversión a WMV completada:', wmvPath);
-      res.status(200).json({ 
-        ok: true, 
-        filename: path.basename(wmvPath),
-        path: wmvPath,
-        format: 'wmv'
-      });
-    } else {
-      res.status(200).json({ 
-        ok: true, 
-        filename: path.basename(req.file.path),
-        path: req.file.path
-      });
-    }
+    // Mantener formato original (WebM)
+    res.status(200).json({ 
+      ok: true, 
+      filename: path.basename(req.file.path),
+      path: req.file.path,
+      format: 'webm'
+    });
   } catch (e) {
     console.error('Error en upload:', e);
     res.status(500).json({ ok: false, error: e.message });
@@ -308,3 +325,127 @@ server.listen(PORT, () => {
   console.log(`  - Frontend en http://localhost:${PORT}`);
   console.log(`  - WebSocket en ws://localhost:${PORT}`);
 });
+
+// ============ SISTEMA DE LIMPIEZA Y GARBAGE COLLECTION ============
+function gracefulShutdown(signal) {
+  console.log(`\n🛑 Recibida señal ${signal}. Iniciando cierre ordenado...`);
+  
+  // 1. Detener el servidor HTTP
+  console.log('⏹️  Cerrando servidor HTTP...');
+  server.close((err) => {
+    if (err) {
+      console.error('❌ Error cerrando servidor HTTP:', err);
+    } else {
+      console.log('✅ Servidor HTTP cerrado correctamente');
+    }
+  });
+
+  // 2. Cerrar todas las conexiones WebSocket
+  console.log('🔌 Cerrando conexiones WebSocket...');
+  if (wss) {
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        try {
+          client.terminate();
+        } catch (e) {
+          console.error('Error cerrando cliente WS:', e.message);
+        }
+      }
+    });
+    
+    wss.close(() => {
+      console.log('✅ WebSocket Server cerrado correctamente');
+    });
+  }
+
+  // 3. Cerrar conexión de Gazepoint
+  console.log('👁️  Cerrando conexión Gazepoint...');
+  if (gazepointClient) {
+    try {
+      gazepointClient.destroy();
+      gazepointClient = null;
+      console.log('✅ Conexión Gazepoint cerrada');
+    } catch (e) {
+      console.error('Error cerrando Gazepoint:', e.message);
+    }
+  }
+
+  // 4. Limpiar timers de reconexión
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    console.log('✅ Timer de reconexión limpiado');
+  }
+
+  // 5. Cerrar streams de archivos si están abiertos
+  console.log('📁 Cerrando streams de archivos...');
+  if (txtStream) {
+    try {
+      txtStream.end();
+      txtStream = null;
+      console.log('✅ Stream TXT cerrado');
+    } catch (e) {
+      console.error('Error cerrando txtStream:', e.message);
+    }
+  }
+  
+  if (gazepointStream) {
+    try {
+      gazepointStream.end();
+      gazepointStream = null;
+      console.log('✅ Stream Gazepoint cerrado');
+    } catch (e) {
+      console.error('Error cerrando gazepointStream:', e.message);
+    }
+  }
+
+  // 6. Limpiar variables globales
+  console.log('🧹 Limpiando variables globales...');
+  currentRecordingPath = null;
+  currentRecordingFolder = null;
+  currentSessionId = null;
+  headerWritten = false;
+  
+  // 7. Forzar garbage collection si está disponible
+  console.log('🗑️  Ejecutando garbage collection...');
+  if (global.gc) {
+    try {
+      global.gc();
+      console.log('✅ Garbage collection ejecutado');
+    } catch (e) {
+      console.error('Error en garbage collection:', e.message);
+    }
+  } else {
+    console.log('⚠️  Garbage collection no disponible (usar --expose-gc para habilitarlo)');
+  }
+
+  // 8. Salir del proceso después de un pequeño delay
+  console.log('👋 Finalizando proceso...');
+  setTimeout(() => {
+    console.log('✅ Proceso finalizado correctamente');
+    process.exit(0);
+  }, 1000);
+}
+
+// Capturar señales de cierre
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));   // Ctrl+C
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM')); // Terminación normal
+process.on('SIGQUIT', () => gracefulShutdown('SIGQUIT')); // Quit
+
+// Capturar errores no manejados
+process.on('uncaughtException', (error) => {
+  console.error('❌ Error no capturado:', error);
+  gracefulShutdown('UNCAUGHT_EXCEPTION');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Promise rechazada sin manejar:', reason);
+  gracefulShutdown('UNHANDLED_REJECTION');
+});
+
+// Manejar el evento beforeExit
+process.on('beforeExit', (code) => {
+  console.log('🔄 Proceso a punto de salir con código:', code);
+});
+
+console.log('🛡️  Sistema de limpieza configurado correctamente');
