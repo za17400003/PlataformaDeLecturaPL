@@ -26,27 +26,23 @@
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #f7f6f2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: #f8f9fa;
+  min-height: 400px;
+  padding-top: 70px; /* Espacio para la barra de grabación fija */
 }
 
 .Lector-viewer .epub-container {
-  background: #f7f6f2;
-  width: 100% !important;
-  height: 100% !important;
-  overflow: hidden;
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
+  background: white;
+  width: 100%;
+  height: 100%;
+  position: relative;
 }
 
 .Lector-viewer iframe {
-  background: white !important;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  background: white;
+  width: 100%;
+  height: 100%;
+  border: none;
 }
 
 /* modifier (se puede mantener por compatibilidad) */
@@ -67,7 +63,7 @@
 .Lector-title { 
   font-weight: 700; 
   color: #1b5e5a; 
-  max-width: 300px; /* Limitar ancho máximo */
+  max-width: 500px; /* Más espacio para títulos largos */
   overflow: hidden; /* Ocultar overflow */
   text-overflow: ellipsis; /* Agregar puntos suspensivos */
   white-space: nowrap; /* Evitar salto de línea */
@@ -148,6 +144,7 @@
 
 .Lector-slider {
   -webkit-appearance: none;
+  appearance: none;
   width: 100%;
   height: 4px;
   border-radius: 2px;
@@ -320,33 +317,7 @@
   transition: opacity 240ms ease-out;
 }
 
-/* asegurar que epub inyectado ocupe todo; themes inyectados en epub se encargan de centrar contenido single */
-.Lector-viewer > .epubjs-container,
-.Lector-viewer iframe {
-  align-items: center !important;
-  justify-content: center !important;
-  width: 100% !important;
-  height: 100% !important;
-  border: none !important;
-  background: transparent !important;
-  /* dark/neutral background to prevent white flash from iframe initial paint */
-  background: transparent !important;
-}
-
-/* Ayuda a evitar que el contenido interno empuje el layout fuera del iframe */
-.Lector-viewer > .epubjs-container iframe,
-.Lector-viewer > .epubjs-container .viewport {
-  width: 100% !important;
-  height: 100% !important;
-  overflow: hidden !important;
-}
-
-/* regla segura dentro del iframe (algunas versiones necesitan esto para no romper columnas) */
-.Lector-viewer > .epubjs-container iframe body,
-.Lector-viewer > .epubjs-container iframe html {
-  box-sizing: border-box !important;
-  min-width: 0 !important;
-}
+/* CSS básico para el contenedor de epub - SIN restricciones */
 
 /* footer y slider (mantengo tu estilo bonito) */
 .Lector-footer {
@@ -384,16 +355,24 @@
 .Lector-loading {
   color: #2b6a66;
   font-weight: 600;
-  position: absolute;
+  position: fixed; /* Cambiar a fixed para mejor posicionamiento */
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 1.2rem;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 1rem 2rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  z-index: 45;
+  font-size: 1.4rem; /* Aumentar tamaño */
+  background: rgba(255, 255, 255, 0.98);
+  padding: 2.5rem 4rem; /* Más padding para evitar que se corte */
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  z-index: 99999; /* Z-index más alto */
+  white-space: nowrap;
+  min-width: 300px; /* Más ancho garantizado */
+  text-align: center;
+  border: 2px solid rgba(107, 115, 255, 0.3);
+  font-family: "Fredoka", sans-serif; /* Fuente consistente */
+  /* Evitar que se corte en pantallas pequeñas */
+  max-width: 90vw;
+  word-break: keep-all;
 }
 
 /* POPUP de ajustes (estilo inspirado en las imágenes, responsive) */
@@ -511,29 +490,32 @@
 
 /* ========== RECORDING BAR ========== */
 .Recording-bar {
-  position: absolute;
-  top: 15px; /* Posición óptima */
+  position: fixed; /* Cambiar a fixed para mejor control */
+  top: 0; /* Pegado al borde superior completo */
   left: 50%;
-  transform: translateX(-50%); /* Centrada */
-  z-index: 100;
+  transform: translateX(-50%);
+  z-index: 1000; /* Z-index muy alto */
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 6px; /* Espacio adecuado entre botones */
-  padding: 6px 12px; /* Padding balanceado */
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 40px; /* Forma elegante */
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12); /* Sombra sutil pero visible */
+  gap: 8px;
+  padding: 8px 16px; /* Padding ajustado */
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 0 0 25px 25px; /* Solo bordes inferiores redondeados */
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-top: none; /* Sin borde superior */
+  min-height: 48px; /* Altura fija */
 }
 
 .Recording-bar button {
-  width: 40px; /* Tamaño óptimo - ni muy grande ni muy pequeño */
-  height: 40px;
+  width: 44px; /* Más grande para mejor visibilidad */
+  height: 44px;
   border-radius: 50%;
-  border: 1.5px solid; /* Borde visible pero no grueso */
+  border: 2px solid; /* Borde más visible */
   cursor: pointer;
   font-weight: bold;
-  font-size: 0.9rem; /* Tamaño de fuente legible */
+  font-size: 1rem; /* Fuente más grande */
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
@@ -558,12 +540,14 @@
   color: #5bd8cf;
 }
 
-.Recording-bar .gaze-btn:disabled {
-  background: #f0f0f0;
-  border-color: #ccc;
-  color: #ccc;
-  cursor: not-allowed;
-  opacity: 0.5;
+.Recording-bar .gaze-btn:disabled,
+.Recording-bar .gaze-btn.disabled {
+  background: #f5f5f5 !important; /* Fondo gris claro */
+  border-color: #ddd !important;  /* Borde gris */
+  color: #bbb !important;         /* Texto muy claro */
+  cursor: not-allowed !important;
+  opacity: 0.4 !important;        /* Más transparente */
+  transform: none !important;     /* Sin efectos hover */
 }
 
 .Recording-bar .record-btn {
@@ -994,5 +978,358 @@
   .Block-timer.bottom-position .Block-timer-content {
     padding: 0.5rem 0.75rem;
     font-size: 0.8rem;
+  }
+}
+
+/* ========== MODAL DEL ÍNDICE ========== */
+.Index-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.Index-modal {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px; /* Más ancho para acomodar números de página */
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.Index-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+}
+
+.Index-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.Index-close {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  transition: all 0.2s ease;
+}
+
+.Index-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #333;
+}
+
+/* Barra de búsqueda */
+.Index-search {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.Index-search-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.Index-search-input:focus {
+  border-color: #6B73FF;
+  box-shadow: 0 0 0 2px rgba(107, 115, 255, 0.1);
+}
+
+.Index-search-clear {
+  position: absolute;
+  right: 2rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  color: #999;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+}
+
+.Index-search-clear:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #666;
+}
+
+.Index-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.Index-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.Index-item {
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.Index-item:hover {
+  background: rgba(107, 115, 255, 0.08);
+  border-left: 3px solid #6B73FF;
+}
+
+.Index-item:last-child {
+  border-bottom: none;
+}
+
+.Index-item-label {
+  font-size: 0.95rem;
+  color: #2c3e50;
+  line-height: 1.4;
+  flex: 1;
+  margin-right: 1rem;
+}
+
+.Index-item-page {
+  font-size: 0.8rem;
+  color: #666;
+  background: #f5f5f5;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.Index-empty,
+.Index-no-results {
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: #666;
+}
+
+.Index-empty p,
+.Index-no-results p {
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.Index-goto-start,
+.Index-clear-search {
+  background: #6B73FF;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s ease;
+}
+
+.Index-goto-start:hover,
+.Index-clear-search:hover {
+  background: #5a64f0;
+}
+
+/* Responsivo para el modal del índice */
+@media (max-width: 768px) {
+  .Index-modal {
+    width: 95%;
+    max-height: 85vh;
+    max-width: 100%;
+  }
+  
+  .Index-header {
+    padding: 0.75rem 1rem;
+  }
+  
+  .Index-header h3 {
+    font-size: 1.1rem;
+  }
+  
+  .Index-search {
+    padding: 0.75rem 1rem;
+  }
+  
+  .Index-search-input {
+    font-size: 0.85rem;
+  }
+  
+  .Index-item {
+    padding: 0.6rem 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.3rem;
+  }
+  
+  .Index-item-label {
+    margin-right: 0;
+    font-size: 0.9rem;
+  }
+  
+  .Index-item-page {
+    align-self: flex-end;
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .Index-modal {
+    width: 98%;
+    max-height: 90vh;
+  }
+  
+  .Index-header {
+    padding: 0.5rem 0.75rem;
+  }
+  
+  .Index-search {
+    padding: 0.5rem 0.75rem;
+  }
+  
+  .Index-item {
+    padding: 0.5rem 0.75rem;
+  }
+}
+
+/* ========== MEJORAS DE VISUALIZACIÓN RESPONSIVA ========== */
+.Lector-viewer {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 1rem;
+  background: #ffffff; /* Fondo blanco para mejor contraste */
+}
+
+/* Contenedor del libro con ancho responsivo mejorado */
+.Lector-viewer > .epubjs-container {
+  max-width: 95vw; /* Usar casi todo el ancho disponible */
+  width: 100%;
+  margin: 0 auto;
+  padding: 1rem 2rem;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Mejoras para el contenido del iframe */
+/* ========== NAVEGACIÓN MEJORADA ========== */
+.Lector-navigation {
+  position: fixed;
+  bottom: 140px; /* Más separación de la barra de grabación */
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2rem; /* Más espacio entre botones */
+  z-index: 900;
+  align-items: center;
+}
+
+.nav-button {
+  background: rgba(107, 115, 255, 0.95); /* Más opacidad */
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50px;
+  padding: 12px 20px; /* Más padding */
+  font-size: 1.1rem; /* Texto más grande */
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 20px rgba(107, 115, 255, 0.4); /* Sombra más fuerte */
+  min-width: 50px; /* Ancho mínimo */
+  min-height: 50px; /* Alto mínimo */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-button:hover {
+  background: rgba(92, 107, 192, 0.95);
+  transform: translateY(-3px); /* Efecto hover más pronunciado */
+  box-shadow: 0 8px 25px rgba(107, 115, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.nav-button:active {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(107, 115, 255, 0.5);
+}
+
+/* Botón específico del índice */
+.nav-button.index-button {
+  background: rgba(232, 244, 253, 0.95);
+  color: #333;
+  border-color: rgba(107, 115, 255, 0.3);
+}
+
+.nav-button.index-button:hover {
+  background: rgba(255, 255, 255, 0.95);
+  color: #6B73FF;
+  border-color: rgba(107, 115, 255, 0.5);
+}
+
+/* Navegación responsive */
+@media (max-width: 768px) {
+  .Lector-navigation {
+    bottom: 130px;
+    gap: 1.5rem;
+  }
+  
+  .nav-button {
+    padding: 10px 16px;
+    font-size: 1rem;
+    min-width: 45px;
+    min-height: 45px;
+  }
+}
+
+@media (max-width: 480px) {
+  .Lector-navigation {
+    bottom: 120px;
+    gap: 1rem;
+  }
+  
+  .nav-button {
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    min-width: 40px;
+    min-height: 40px;
   }
 }

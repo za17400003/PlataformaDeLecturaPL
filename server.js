@@ -11,6 +11,12 @@ const { exec } = require('child_process');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Middleware para desactivar keep-alive y forzar conexiones de una sola vez
+app.use((req, res, next) => {
+  res.set('Connection', 'close');
+  next();
+});
+
 app.use(cors());
 app.use(express.json());
 
@@ -33,6 +39,8 @@ const GP_PORT = parseInt(process.env.GAZEPOINT_PORT || '4242', 10);
 let gazepointClient = null;
 let reconnectTimer = null;
 let reconnectAttempts = 0;
+let maxReconnectAttempts = 3; // LIMITAR a 3 intentos
+let gazepointConnectionRequested = false; // Solo conectar cuando se necesite
 let currentRecordingPath = null;
 let currentRecordingFolder = null;
 let currentSessionId = null; // Agregar sessionId
@@ -47,7 +55,13 @@ function writeCsvHeaderIfNeeded() {
   }
 }
 
-function connectToGazepoint() {
+function connectToGazepoint(forceConnect = false) {
+  // Si no se ha solicitado explícitamente la conexión y no es forzada, salir
+  if (!gazepointConnectionRequested && !forceConnect) {
+    console.log('[gazepoint] Conexión no requerida, omitiendo...');
+    return;
+  }
+
   if (gazepointClient) {
     try { gazepointClient.destroy(); } catch (_) {}
     gazepointClient = null;
@@ -88,8 +102,17 @@ function connectToGazepoint() {
 
   function scheduleReconnect(reason) {
     if (reconnectTimer) return;
+    
+    // LIMITAR intentos de reconexión
+    if (reconnectAttempts >= maxReconnectAttempts) {
+      console.warn(`[gazepoint] Máximo de ${maxReconnectAttempts} intentos alcanzado. Deteniendo reconexiones automáticas.`);
+      console.warn(`[gazepoint] Para reconectar, active la grabación o subrayado ocular.`);
+      gazepointConnectionRequested = false; // Resetear flag
+      return;
+    }
+
     const delay = Math.min(30000, 1000 * Math.pow(2, reconnectAttempts++));
-    console.warn(`[gazepoint] desconectado (${reason}). Reintentando en ${Math.round(delay/1000)}s...`);
+    console.warn(`[gazepoint] desconectado (${reason}). Intento ${reconnectAttempts}/${maxReconnectAttempts} en ${Math.round(delay/1000)}s...`);
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
       connectToGazepoint();
@@ -119,21 +142,63 @@ function parseGazepointData(xmlData) {
   }
 }
 
+// Función para solicitar conexión a Gazepoint cuando sea necesario
+function requestGazepointConnection() {
+  gazepointConnectionRequested = true;
+  reconnectAttempts = 0; // Resetear intentos
+  connectToGazepoint(true); // Forzar conexión
+}
+
 // ============ CREAR SERVIDOR HTTP ============
 const server = http.createServer(app);
+
+// Configurar timeouts para conexiones rápidas sin keep-alive agresivo
+server.keepAliveTimeout = 1000; // 1 segundo - menos agresivo
+server.headersTimeout = 2000; // Ligeramente mayor que keepAliveTimeout
+server.requestTimeout = 3000; // Timeout para requests (3 segundos)
+
+// Mantener track de todas las conexiones activas para poder cerrarlas
+const activeConnections = new Set();
+
+server.on('connection', (socket) => {
+  activeConnections.add(socket);
+  
+  // Configurar socket para cierre rápido SIN keep-alive agresivo
+  socket.setKeepAlive(false); // Desactivar keep-alive completamente
+  socket.setTimeout(3000); // Timeout de 3 segundos
+  
+  socket.on('close', () => {
+    activeConnections.delete(socket);
+  });
+  
+  socket.on('timeout', () => {
+    console.log('Socket timeout, cerrando conexión');
+    socket.destroy();
+    activeConnections.delete(socket);
+  });
+  
+  socket.on('error', (err) => {
+    console.error('Error en socket:', err.message);
+    activeConnections.delete(socket);
+    socket.destroy();
+  });
+});
 
 // ============ WEBSOCKET ============
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
   console.log('Cliente web conectado al WS');
-  if (!gazepointClient) connectToGazepoint();
+  // NO conectar automáticamente a Gazepoint, solo cuando se necesite
 
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
 
       if (data.type === 'START_RECORDING') {
+        // SOLICITAR conexión a Gazepoint cuando inicia grabación
+        requestGazepointConnection();
+        
         // Usar el sessionId proporcionado o generar uno nuevo
         const sessionId = data.sessionId || new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
         const recordingFolderName = sessionId.replace('Z', ''); // Limpiar si viene con Z
@@ -156,6 +221,10 @@ wss.on('connection', (ws) => {
         txtStream.write(`# Eye tracking recording\n# started_at=${isoTimestamp}\n# host=${GP_HOST}\n# port=${GP_PORT}\n`);
         gazepointStream.write(`Recording started at: ${isoTimestamp}\n`);
         console.log(`[gazepoint] Grabación iniciada en: ${recordingFolder} para sesión: ${sessionId}`);
+
+      } else if (data.type === 'ENABLE_GAZE_TRACKING') {
+        // SOLICITAR conexión cuando se activa subrayado ocular
+        requestGazepointConnection();
       } else if (data.type === 'STOP_RECORDING') {
         if (txtStream) { try { txtStream.end(); } catch(_) {} txtStream = null; }
         if (gazepointStream) { try { gazepointStream.end(); } catch(_) {} gazepointStream = null; }
@@ -327,11 +396,28 @@ server.listen(PORT, () => {
 });
 
 // ============ SISTEMA DE LIMPIEZA Y GARBAGE COLLECTION ============
+let isShuttingDown = false; // Prevenir múltiples intentos de cierre
+
 function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  
   console.log(`\n🛑 Recibida señal ${signal}. Iniciando cierre ordenado...`);
   
-  // 1. Detener el servidor HTTP
+  // 1. Detener el servidor HTTP con cierre AGRESIVO de conexiones
   console.log('⏹️  Cerrando servidor HTTP...');
+  
+  // Cerrar todas las conexiones activas INMEDIATAMENTE
+  console.log(`🔌 Forzando cierre de ${activeConnections.size} conexiones HTTP...`);
+  activeConnections.forEach(socket => {
+    try {
+      // Forzar fin inmediato de la conexión
+      socket.destroy();
+    } catch (e) {}
+  });
+  activeConnections.clear();
+  
+  // Cerrar el servidor
   server.close((err) => {
     if (err) {
       console.error('❌ Error cerrando servidor HTTP:', err);
@@ -339,29 +425,43 @@ function gracefulShutdown(signal) {
       console.log('✅ Servidor HTTP cerrado correctamente');
     }
   });
-
-  // 2. Cerrar todas las conexiones WebSocket
-  console.log('🔌 Cerrando conexiones WebSocket...');
-  if (wss) {
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        try {
-          client.terminate();
-        } catch (e) {
-          console.error('Error cerrando cliente WS:', e.message);
-        }
-      }
-    });
-    
-    wss.close(() => {
-      console.log('✅ WebSocket Server cerrado correctamente');
-    });
+  
+  // NO esperar - forzar cierre inmediato
+  if (server.listening) {
+    console.log('⚠️  Forzando cierre INMEDIATO del servidor...');
+    try {
+      server.closeAllConnections && server.closeAllConnections();
+      server.close();
+    } catch (e) {}
   }
 
-  // 3. Cerrar conexión de Gazepoint
+  // 2. Cerrar todas las conexiones WebSocket INMEDIATAMENTE
+  console.log('🔌 Cerrando conexiones WebSocket...');
+  if (wss) {
+    const clientCount = wss.clients.size;
+    console.log(`📊 Forzando cierre de ${clientCount} conexiones WebSocket...`);
+    
+    wss.clients.forEach((client, index) => {
+      try {
+        // Terminar INMEDIATAMENTE sin mensajes
+        client.terminate();
+      } catch (e) {}
+    });
+    
+    // Cerrar el WebSocket server inmediatamente
+    try {
+      wss.close();
+      wss.terminate && wss.terminate();
+    } catch (e) {}
+    
+    console.log('✅ WebSocket Server cerrado INMEDIATAMENTE');
+  }
+
+  // 3. Cerrar conexión de Gazepoint con limpieza completa
   console.log('👁️  Cerrando conexión Gazepoint...');
   if (gazepointClient) {
     try {
+      gazepointClient.removeAllListeners(); // Remover todos los event listeners
       gazepointClient.destroy();
       gazepointClient = null;
       console.log('✅ Conexión Gazepoint cerrada');
@@ -370,12 +470,13 @@ function gracefulShutdown(signal) {
     }
   }
 
-  // 4. Limpiar timers de reconexión
+  // 4. Limpiar timers de reconexión y resetear intentos
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
     console.log('✅ Timer de reconexión limpiado');
   }
+  reconnectAttempts = 0; // Resetear contador de intentos
 
   // 5. Cerrar streams de archivos si están abiertos
   console.log('📁 Cerrando streams de archivos...');
@@ -419,12 +520,18 @@ function gracefulShutdown(signal) {
     console.log('⚠️  Garbage collection no disponible (usar --expose-gc para habilitarlo)');
   }
 
-  // 8. Salir del proceso después de un pequeño delay
+  // 8. Salir del proceso INMEDIATAMENTE
   console.log('👋 Finalizando proceso...');
   setTimeout(() => {
     console.log('✅ Proceso finalizado correctamente');
     process.exit(0);
-  }, 1000);
+  }, 500); // Reducido a 500ms
+  
+  // Terminación forzada más rápida
+  setTimeout(() => {
+    console.log('⚠️  Terminación forzada activada');
+    process.kill(process.pid, 'SIGKILL');
+  }, 2000); // Reducido a 2 segundos
 }
 
 // Capturar señales de cierre

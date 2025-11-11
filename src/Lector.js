@@ -11,6 +11,19 @@ export default function Lector(props) {
   // Debug flag
   const DEBUG = true;
 
+  // Función para reaplicar estilos (simplificada como backup)
+  const reapplyAdaptiveStyles = useCallback(async () => {
+    const rendition = renditionRef.current;
+    if (!rendition || !mountedRef.current) return;
+
+    try {
+      // Simplemente aplicar las preferencias como en backup
+      applyPrefsToRendition(rendition, prefs);
+    } catch (e) {
+      if (DEBUG) console.warn('[reader] Error reaplicando estilos adaptativos:', e);
+    }
+  }, [prefs, applyPrefsToRendition]);
+
   // Referencias principales
   const viewerRef = useRef(null);
   const bookRef = useRef(null);
@@ -283,6 +296,36 @@ export default function Lector(props) {
     };
   }, []);
 
+  // Efecto para manejar cambios de orientación/tamaño (como Google Play Libros)
+  useEffect(() => {
+    let resizeTimeout;
+    
+    const handleAdaptiveResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(async () => {
+        const rendition = renditionRef.current;
+        if (!rendition || !mountedRef.current) return;
+        
+        try {
+          // Reconfigurar estilos adaptativos
+          await reapplyAdaptiveStyles();
+          if (DEBUG) console.log('[reader] Estilos adaptativos reaplicados por cambio de tamaño');
+        } catch (e) {
+          if (DEBUG) console.warn('[reader] Error reaplicando estilos adaptativos:', e);
+        }
+      }, 300); // Debounce de 300ms
+    };
+
+    window.addEventListener('resize', handleAdaptiveResize);
+    window.addEventListener('orientationchange', handleAdaptiveResize);
+
+    return () => {
+      window.removeEventListener('resize', handleAdaptiveResize);
+      window.removeEventListener('orientationchange', handleAdaptiveResize);
+      clearTimeout(resizeTimeout);
+    };
+  }, [reapplyAdaptiveStyles, DEBUG]);
+
   // Inicialización y cleanup
   useEffect(() => {
     if (!archivo) return;
@@ -349,21 +392,15 @@ export default function Lector(props) {
         
         if (!mountedRef.current) return;
 
-        // Crear el rendition después de que el libro esté listo
-  if (DEBUG) console.log('Libro listo, creando rendition...');
-  // Hide viewer until we get the first rendered event to avoid white flash
-  try { viewerRef.current?.classList.add('hidden'); } catch(e) {}
+        // Crear el rendition con configuración simple (como backup)
         const rendition = book.renderTo(viewerRef.current, {
           width: '100%',
           height: '100%',
           flow: 'paginated',
-          manager: 'default',
-          spread: isTwoPages ? 'always' : 'none',
-          minSpreadWidth: 1000, // Ayuda con el modo de dos páginas
-          allowScriptedContent: false // Seguridad
+          spread: 'auto' // Usar la configuración simple del backup
         });
         
-  renditionRef.current = rendition;
+        renditionRef.current = rendition;
         
         // Esperar a que el rendition esté listo (o timeout)
         if (DEBUG) console.log('Esperando a que el rendition esté listo...');
@@ -440,7 +477,8 @@ export default function Lector(props) {
             
             try {
               renditionRef.current.resize();
-              applyPrefsToRendition(renditionRef.current, prefs);
+              // DESACTIVAR CSS personalizado
+              // applyPrefsToRendition(renditionRef.current, prefs);
               if (showPageArrows) {
                 handleMouseMove();
               }
@@ -455,47 +493,22 @@ export default function Lector(props) {
           resizeObserverRef.current = resizeObserver;
         }
 
-        // Configurar tema por defecto con texto justificado y centrado
-        if (DEBUG) console.log('Aplicando estilos por defecto...');
-        await renditionRef.current.themes.default({
-          '*': {
-            'box-sizing': 'border-box',
-            'margin': '0',
-            'padding': '0'
-          },
-          'body': { 
-            'margin': '0 auto',
-            'padding': '2rem',
-            'max-width': '800px',
-            'text-align': 'justify',
-            'hyphens': 'auto',
-            '-webkit-hyphens': 'auto',
-            '-ms-hyphens': 'auto',
-            'font-family': 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-          },
-          'p': {
-            'text-align': 'justify',
-            'margin': '1em 0',
-            'line-height': '1.6'
-          },
-          'img': {
-            'display': 'block',
-            'margin': '1em auto',
-            'max-width': '100%',
-            'height': 'auto'
-          }
-        });
-
+        // Configuración simple y básica - SIN temas personalizados
+        console.log('Rendition creado, aplicando configuración mínima...');
+        
+        // NO aplicar ningún tema personalizado - dejar que ePub.js maneje todo por defecto
         // Configurar event handlers
         renditionRef.current.on('relocated', (loc) => {
           if (!mountedRef.current) return;
           updateProgressFromRendition(loc).catch(() => {});
-          try { applyPrefsToRendition(renditionRef.current, prefs); } catch (e) { if (DEBUG) console.warn('[reader] applyPrefs relocated error', e); }
+          // DESACTIVAR CSS personalizado
+          // try { applyPrefsToRendition(renditionRef.current, prefs); } catch (e) { if (DEBUG) console.warn('[reader] applyPrefs relocated error', e); }
         });
 
         renditionRef.current.on('rendered', (section) => {
           if (!mountedRef.current) return;
           try {
+            // Aplicar solo las preferencias básicas (tema, fuente) SIN CSS restrictivo
             applyPrefsToRendition(renditionRef.current, prefs);
           } catch (e) {
             if (DEBUG) console.warn('[reader] applyPrefs rendered error', e);
@@ -632,7 +645,6 @@ export default function Lector(props) {
           }
           .epub-view > iframe {
             width: 100% !important;
-            max-width: 800px !important;
             margin: 0 auto !important;
             display: block !important;
           }
@@ -989,11 +1001,7 @@ export default function Lector(props) {
           className="Lector-viewer single-page"
           ref={viewerRef}
           style={{ 
-            filter: `brightness(${prefs.brightness})`,
-            display: 'flex',
-            justifyContent: 'center',
-            position: 'relative',
-            overflow: 'hidden'
+            filter: `brightness(${prefs.brightness})`
           }}
           onMouseMove={handleMouseMove}
           onMouseEnter={handleMouseMove}

@@ -10,6 +10,7 @@ export default function LectorSimple(props) {
   const bookRef = useRef(null);
   const renditionRef = useRef(null);
   const [ready, setReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Estado específico para carga
   const [progress, setProgress] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
@@ -22,6 +23,9 @@ export default function LectorSimple(props) {
   const [currentPage, setCurrentPage] = useState(1);
   const [enableGazeHighlight, setEnableGazeHighlight] = useState(false);
   const [bookTitle, setBookTitle] = useState('Cargando...'); // Estado para el título del libro
+  const [showIndexModal, setShowIndexModal] = useState(false); // Modal del índice
+  const [bookIndex, setBookIndex] = useState([]); // Capítulos del libro
+  const [indexSearch, setIndexSearch] = useState(''); // Búsqueda en el índice
   
   // Estados para el sistema de bloques de lectura
   const [showBlockModal, setShowBlockModal] = useState(false);
@@ -54,44 +58,67 @@ export default function LectorSimple(props) {
     };
     
     const css = `
-      html, body, body * {
+      html, body {
         font-family: ${fontMap[prefs.font]} !important;
         font-size: ${prefs.fontSize}% !important;
         line-height: ${prefs.lineHeight} !important;
-      }
-      body {
         background: ${prefs.theme === 'dark' ? '#0b0c0c' : prefs.theme === 'sepia' ? '#f4ecd8' : '#ffffff'} !important;
         color: ${prefs.theme === 'dark' ? '#e8f6f5' : '#222222'} !important;
         filter: brightness(${prefs.brightness}) !important;
+        margin: 0 !important;
+        padding: 20px !important;
+      }
+      body * {
+        font-family: inherit !important;
+        line-height: inherit !important;
+      }
+      p, div, span {
+        margin-bottom: 1em !important;
       }
     `;
     
     try {
-      // Inyectar CSS directamente en el iframe en lugar de usar themes
-      const iframes = document.querySelectorAll('iframe');
-      iframes.forEach(iframe => {
-        try {
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-          if (iframeDoc) {
-            // Remover style anterior si existe
-            const oldStyle = iframeDoc.getElementById('epub-user-prefs');
-            if (oldStyle) oldStyle.remove();
-            
-            // Crear nuevo style
-            const style = iframeDoc.createElement('style');
-            style.id = 'epub-user-prefs';
-            style.textContent = css;
-            iframeDoc.head.appendChild(style);
+      // Inyectar CSS directamente en el iframe
+      setTimeout(() => {
+        const iframes = document.querySelectorAll('iframe');
+        iframes.forEach(iframe => {
+          try {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+            if (iframeDoc && iframeDoc.body) {
+              // Remover style anterior si existe
+              const oldStyle = iframeDoc.getElementById('epub-user-prefs');
+              if (oldStyle) oldStyle.remove();
+              
+              // Crear nuevo style
+              const style = iframeDoc.createElement('style');
+              style.id = 'epub-user-prefs';
+              style.textContent = css;
+              iframeDoc.head.appendChild(style);
+              
+              // Asegurar visibilidad del contenido
+              if (iframeDoc.body) {
+                iframeDoc.body.style.visibility = 'visible';
+                iframeDoc.body.style.opacity = '1';
+              }
+            }
+          } catch (e) {
+            console.log('[lector] No se pudo acceder al iframe:', e);
           }
-        } catch (_) {}
-      });
-    } catch (_) {}
+        });
+      }, 100);
+    } catch (e) {
+      console.log('[lector] Error aplicando estilos:', e);
+    }
   }, [prefs]);
 
   // Inicializar libro
   useEffect(() => {
     if (!archivo) return;
     let mounted = true;
+    
+    // Resetear estados de carga
+    setIsLoading(true);
+    setReady(false);
 
     const init = async () => {
       try {
@@ -105,22 +132,57 @@ export default function LectorSimple(props) {
         const title = metadata.title || archivo.split('/').pop().replace('.epub', '') || 'Libro sin título';
         setBookTitle(title);
 
+        // Extraer índice/tabla de contenidos
+        const navigation = book.navigation;
+        if (navigation && navigation.toc) {
+          const indexItems = await Promise.all(
+            navigation.toc.map(async (item, index) => {
+              let pageNumber = null;
+              // Intentar obtener el número de página
+              try {
+                if (item.href && book.locations.length()) {
+                  const cfi = book.canonical(item.href);
+                  const percentage = book.locations.percentageFromCfi(cfi);
+                  pageNumber = Math.floor(percentage * book.locations.length());
+                }
+              } catch (e) {
+                // Si no se puede obtener, usar el índice
+                pageNumber = index + 1;
+              }
+              
+              return {
+                id: index,
+                label: item.label,
+                href: item.href,
+                cfi: item.cfi || null,
+                page: pageNumber
+              };
+            })
+          );
+          setBookIndex(indexItems);
+        }
+
         const rendition = book.renderTo(viewerRef.current, {
           width: '100%',
           height: '100%',
-          flow: 'paginated'
+          flow: 'paginated',
+          spread: 'none' // Una sola columna
         });
         renditionRef.current = rendition;
 
         // Generar locations
         if (!book.locations.length()) {
+          console.log('[lector] Generando locations...');
           await book.locations.generate(256);
+          console.log('[lector] Locations generadas:', book.locations.length());
         }
         const total = book.locations.length();
         setTotalPages(total);
 
-        // Mostrar primera página
+        // Mostrar primera página con mejor manejo
+        console.log('[lector] Mostrando primera página...');
         await rendition.display();
+        console.log('[lector] Primera página mostrada');
 
         // Eventos
         rendition.on('relocated', (loc) => {
@@ -131,14 +193,23 @@ export default function LectorSimple(props) {
             setCurrentPage(Math.max(1, Math.floor((pct / 100) * total)));
           }
           // Aplicar estilos cuando la página cambia
+          setTimeout(() => applyPrefsToBook(), 100);
+        });
+
+        // Asegurar que el libro es visible
+        rendition.on('rendered', () => {
+          console.log('[lector] Página renderizada');
+          setIsLoading(false); // Ocultar carga cuando se renderiza
           applyPrefsToBook();
         });
 
         setReady(true);
-        applyPrefsToBook();
+        setIsLoading(false); // Por si acaso, ocultar carga también aquí
+        console.log('[lector] Libro listo para lectura');
       } catch (e) {
         console.error('Error inicializando libro:', e);
         setReady(true);
+        setIsLoading(false); // Ocultar carga en caso de error
       }
     };
 
@@ -167,6 +238,14 @@ export default function LectorSimple(props) {
     }
   }, [gazeConnected, isRecording]);
 
+  // Si Gazepoint se desconecta, desactivar subrayado ocular
+  useEffect(() => {
+    if (!gazeConnected && enableGazeHighlight) {
+      console.warn('[lector] Gazepoint desconectado, desactivando subrayado ocular');
+      setEnableGazeHighlight(false);
+    }
+  }, [gazeConnected, enableGazeHighlight]);
+
   // Limpiar timer de bloques al desmontar componente
   useEffect(() => {
     return () => {
@@ -186,6 +265,24 @@ export default function LectorSimple(props) {
     if (!renditionRef.current) return;
     renditionRef.current.prev().catch(() => {});
   };
+
+  const openIndex = () => {
+    setShowIndexModal(true);
+    setIndexSearch(''); // Limpiar búsqueda al abrir
+  };
+
+  const navigateToChapter = (item) => {
+    const rendition = renditionRef.current;
+    if (rendition && item.href) {
+      rendition.display(item.href).catch(() => {});
+      setShowIndexModal(false);
+    }
+  };
+
+  // Filtrar capítulos según la búsqueda
+  const filteredIndex = bookIndex.filter(item =>
+    item.label.toLowerCase().includes(indexSearch.toLowerCase())
+  );
 
   const goToStart = () => {
     const book = bookRef.current;
@@ -412,10 +509,10 @@ export default function LectorSimple(props) {
           <div className="Lector-controls">
             <button
               className="HeaderBtn"
-              onClick={goToStart}
-              title="Ir al inicio"
+              onClick={openIndex}
+              title="Índice del libro"
             >
-              ⤺
+              📑
             </button>
             <button
               className="HeaderBtn"
@@ -604,7 +701,7 @@ export default function LectorSimple(props) {
             </button>
           </div>
           
-          {!ready && <div className="Lector-loading">Cargando libro…</div>}
+          {isLoading && <div className="Lector-loading">Cargando libro…</div>}
         </main>
 
         <footer className="Lector-footer">
@@ -654,6 +751,90 @@ export default function LectorSimple(props) {
               <span className="Block-number">Bloque {currentBlock}</span>
               <span className="Block-time">{formatTime(blockTimer)}</span>
               <span className="Block-remaining">{formatTime(300 - blockTimer)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Modal del índice del libro */}
+        {showIndexModal && (
+          <div className="Index-modal-overlay" onClick={() => setShowIndexModal(false)}>
+            <div className="Index-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="Index-header">
+                <h3>📑 Índice del Libro</h3>
+                <button 
+                  className="Index-close"
+                  onClick={() => setShowIndexModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              
+              {/* Barra de búsqueda */}
+              {bookIndex.length > 0 && (
+                <div className="Index-search">
+                  <input
+                    type="text"
+                    placeholder="Buscar capítulo..."
+                    value={indexSearch}
+                    onChange={(e) => setIndexSearch(e.target.value)}
+                    className="Index-search-input"
+                  />
+                  {indexSearch && (
+                    <button 
+                      className="Index-search-clear"
+                      onClick={() => setIndexSearch('')}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              )}
+              
+              <div className="Index-content">
+                {bookIndex.length > 0 ? (
+                  <>
+                    {filteredIndex.length > 0 ? (
+                      <ul className="Index-list">
+                        {filteredIndex.map((item) => (
+                          <li 
+                            key={item.id}
+                            className="Index-item"
+                            onClick={() => navigateToChapter(item)}
+                          >
+                            <span className="Index-item-label">{item.label}</span>
+                            {item.page && (
+                              <span className="Index-item-page">Pág. {item.page}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="Index-no-results">
+                        <p>No se encontraron capítulos que coincidan con "{indexSearch}"</p>
+                        <button 
+                          className="Index-clear-search"
+                          onClick={() => setIndexSearch('')}
+                        >
+                          Limpiar búsqueda
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="Index-empty">
+                    <p>No se encontró índice en este libro</p>
+                    <button 
+                      className="Index-goto-start"
+                      onClick={() => {
+                        goToStart();
+                        setShowIndexModal(false);
+                      }}
+                    >
+                      Ir al inicio del libro
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

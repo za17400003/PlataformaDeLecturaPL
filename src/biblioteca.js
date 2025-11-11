@@ -91,22 +91,46 @@ function Biblioteca() {
   };
 
   const avanzarPagina = () => {
-    if (paginationInfo && paginationInfo.hasNextPage) {
-      setDeslizarDireccion('derecha');
-      activarAnimacion('izquierda');
-      setTimeout(() => {
-        setPaginaActual(prev => prev + 1);
-      }, 1200);
+    console.log('avanzarPagina llamada:', { paginationInfo, paginaActual });
+    if (paginationInfo) {
+      if (paginationInfo.hasNextPage) {
+        console.log('Avanzando a página siguiente...');
+        setDeslizarDireccion('derecha');
+        activarAnimacion('izquierda'); // Nube soplando hacia la izquierda
+        setTimeout(() => {
+          setPaginaActual(prev => prev + 1);
+        }, 1200);
+      } else {
+        // Navegación circular: ir al principio
+        console.log('Final alcanzado, volviendo al principio...');
+        setDeslizarDireccion('derecha');
+        activarAnimacion('izquierda'); // Nube soplando hacia la izquierda
+        setTimeout(() => {
+          setPaginaActual(0);
+        }, 1200);
+      }
     }
   };
 
   const retrocederPagina = () => {
-    if (paginationInfo && paginationInfo.hasPrevPage) {
-      setDeslizarDireccion('izquierda');
-      activarAnimacion('derecha');
-      setTimeout(() => {
-        setPaginaActual(prev => prev - 1);
-      }, 1200);
+    console.log('retrocederPagina llamada:', { paginationInfo, paginaActual });
+    if (paginationInfo) {
+      if (paginationInfo.hasPrevPage) {
+        console.log('Retrocediendo a página anterior...');
+        setDeslizarDireccion('izquierda');
+        activarAnimacion('derecha'); // Nube soplando hacia la derecha
+        setTimeout(() => {
+          setPaginaActual(prev => prev - 1);
+        }, 1200);
+      } else {
+        // Navegación circular: ir al final
+        console.log('Principio alcanzado, yendo al final...');
+        setDeslizarDireccion('izquierda');
+        activarAnimacion('derecha'); // Nube soplando hacia la derecha
+        setTimeout(() => {
+          setPaginaActual(paginationInfo.totalPages - 1);
+        }, 1200);
+      }
     }
   };
 
@@ -193,13 +217,13 @@ function Biblioteca() {
             src={flechaIzq}
             alt="Flecha izquierda"
             className="Flecha animable"
-            onClick={avanzarPagina}
+            onClick={retrocederPagina}
           />
           <img
             src={flechaDer}
             alt="Flecha derecha"
             className="Flecha animable"
-            onClick={retrocederPagina}
+            onClick={avanzarPagina}
           />
         </div>
       </div>

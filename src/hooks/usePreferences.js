@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 // Keep a weak map of last-applied CSS per document to avoid redundant writes
 const lastCssPerDocument = new WeakMap();
 
-// Creates CSS with high specificity to override internal styles
+// Creates CSS with high specificity to override internal styles - VERSION BÁSICA
 export const useBuildPrefsCss = () => {
   return useCallback((p) => {
     const fontMap = {
@@ -16,21 +16,14 @@ export const useBuildPrefsCss = () => {
     const color = p.theme === 'dark' ? '#e8f6f5' : '#222222';
     
     return `
-      /* user prefs (high specificity) */
-      html, body, body * {
+      /* user prefs básicas - SOLO tema y fuente */
+      body {
         background: ${bg} !important;
         color: ${color} !important;
         font-family: ${fontFamily} !important;
         font-size: ${p.fontSize}% !important;
         line-height: ${p.lineHeight} !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        box-sizing: border-box !important;
       }
-      body { padding: 1.4rem !important; }
-      img, table { max-width: 100% !important; height: auto !important; }
-      /* asegurar columnas/llens si se usa spread */
-      body { -webkit-column-fill: auto !important; column-fill: auto !important; }
     `;
   }, []);
 };
