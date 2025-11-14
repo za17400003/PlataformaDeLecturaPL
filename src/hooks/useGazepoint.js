@@ -1,3 +1,20 @@
+/**
+ * useGazepoint.js
+ * 
+ * Hook personalizado para conectarse al sistema Gazepoint (eye-tracking)
+ * 
+ * Características:
+ * - Conexión WebSocket al servidor local (ws://localhost:3000)
+ * - Reconexión automática con backoff exponencial
+ * - Recibe datos de seguimiento ocular (leftEye, rightEye)
+ * - Controla inicio/detención de grabación de sesiones
+ * 
+ * Retorna:
+ * - isConnected: boolean - estado de conexión
+ * - startRecording: función para iniciar sesión
+ * - stopRecording: función para detener sesión
+ */
+
 import { useEffect, useRef, useState } from 'react';
 
 export function useGazepoint() {
@@ -7,6 +24,9 @@ export function useGazepoint() {
   const reconnectTimerRef = useRef(null);
 
   useEffect(() => {
+    /**
+     * Conecta al servidor WebSocket de Gazepoint
+     */
     function connect() {
       try {
         // Conecta al mismo servidor unificado (ws://localhost:3000)
@@ -29,6 +49,7 @@ export function useGazepoint() {
           // El onclose se encargará del reconnect
         };
 
+        // Recibir datos de eye-tracking
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
@@ -44,8 +65,12 @@ export function useGazepoint() {
       }
     }
 
+    /**
+     * Programa una reconexión con backoff exponencial
+     */
     function scheduleReconnect() {
       if (reconnectTimerRef.current) return;
+      // Backoff exponencial: 500ms, 1s, 2s, 4s, 8s, 15s (máximo)
       const delay = Math.min(15000, 500 * Math.pow(2, reconnectAttemptsRef.current++));
       reconnectTimerRef.current = setTimeout(() => {
         reconnectTimerRef.current = null;
@@ -54,6 +79,8 @@ export function useGazepoint() {
     }
 
     connect();
+    
+    // Cleanup al desmontar
     return () => {
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
@@ -66,6 +93,10 @@ export function useGazepoint() {
     };
   }, []);
 
+  /**
+   * Inicia la grabación de una sesión de eye-tracking
+   * @param {string} sessionTimestamp - ID único de la sesión
+   */
   const startRecording = (sessionTimestamp) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     const timestamp = new Date().toISOString();
@@ -76,6 +107,9 @@ export function useGazepoint() {
     }));
   };
 
+  /**
+   * Detiene la grabación de eye-tracking
+   */
   const stopRecording = () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     wsRef.current.send(JSON.stringify({ type: 'STOP_RECORDING' }));

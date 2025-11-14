@@ -227,10 +227,10 @@ html, body {
   justify-items: center;
   align-items: start;
   width: 100%;
-  max-width: calc(100vw - 4rem); /* Evitar overflow */
+  max-width: 1200px; /* Limitar ancho máximo para mejor control */
   position: relative;
   z-index: 1;
-  padding: 0.5rem 80px 4rem 80px; /* Reducir padding superior */
+  padding: 0.5rem 2rem 4rem 2rem; /* Padding más controlado */
   margin: 0 auto; /* centrar la grilla */
   box-sizing: border-box;
   overflow: visible; /* Permitir que títulos sobresalgan */
@@ -242,8 +242,8 @@ html, body {
     grid-template-columns: repeat(2, 1fr); /* 2 columnas en tablet */
     grid-template-rows: auto auto auto; /* 3 filas para 6 elementos */
     gap: 1.5rem;
-    max-width: calc(100vw - 3rem); /* Evitar overflow */
-    padding: 1rem 60px 5rem 60px; /* Menos padding lateral */
+    max-width: 90%; /* Reducir ancho para que quepan mejor */
+    padding: 1rem 2rem 5rem 2rem; /* Padding controlado */
     box-sizing: border-box;
   }
 }
@@ -262,9 +262,9 @@ html, body {
   .Nubes-blancas {
     grid-template-columns: repeat(2, 1fr); /* 2 columnas en móvil */
     grid-template-rows: repeat(3, auto); /* 3 filas para 6 elementos */
-    gap: 1.2rem;
-    max-width: calc(100vw - 2rem); /* Evitar overflow en mobile */
-    padding: 0.5rem 40px 5rem 40px; /* Menos padding pero más espacio inferior */
+    gap: 1rem;
+    max-width: 95%; /* Reducir más el ancho para que quepan */
+    padding: 0.5rem 1rem 5rem 1rem; /* Menos padding lateral */
     box-sizing: border-box;
   }
 }
@@ -273,9 +273,9 @@ html, body {
 @media (max-width: 480px) {
   .Nubes-blancas {
     grid-template-columns: repeat(2, 1fr); /* mantener 2 columnas */
-    padding: 1rem 30px 6rem 30px; /* Más espacio inferior para títulos */
-    gap: 1rem;
-    max-width: calc(100vw - 1rem); /* Evitar overflow */
+    padding: 0.5rem 0.5rem 6rem 0.5rem; /* Padding mínimo */
+    gap: 0.8rem;
+    max-width: 98%; /* Casi todo el ancho disponible */
     box-sizing: border-box;
   }
 }
@@ -298,17 +298,17 @@ html, body {
 /* Responsive para libro-nube */
 @media (max-width: 768px) {
   .Libro-nube {
-    min-height: 280px; /* Ajustar altura en mobile */
-    max-width: 250px;
-    padding-bottom: 2.5rem; /* Más espacio en mobile */
+    min-height: 240px; /* Reducir altura en mobile para que quepan mejor */
+    max-width: 180px; /* Reducir ancho significativamente */
+    padding-bottom: 2rem; /* Reducir padding */
   }
 }
 
 @media (max-width: 480px) {
   .Libro-nube {
-    min-height: 260px; /* Compacto pero funcional */
-    max-width: 220px;
-    padding-bottom: 2.5rem;
+    min-height: 220px; /* Más compacto en móviles pequeños */
+    max-width: 160px; /* Aún más pequeño */
+    padding-bottom: 1.5rem;
   }
 }
 
@@ -378,23 +378,23 @@ html, body {
 /* Responsive para nubes */
 @media (max-width: 1024px) {
   .Nube-blanca {
-    width: 240px;
-    height: 180px;
+    width: 220px;
+    height: 170px;
   }
 }
 
 @media (max-width: 768px) {
   .Nube-blanca {
-    width: 220px;
-    height: 160px;
+    width: 180px; /* Más pequeño para que quepan 2 columnas */
+    height: 140px;
   }
 }
 
 @media (max-width: 480px) {
   .Nube-blanca {
-    width: 200px;
-    height: 140px;
-    padding: 0.4rem;
+    width: 160px; /* Aún más pequeño para móviles */
+    height: 120px;
+    padding: 0.3rem;
   }
 }
 
@@ -490,18 +490,18 @@ html, body {
 /* Responsive para títulos - Mejor posicionamiento */
 @media (max-width: 768px) {
   .Titulo-libro {
-    font-size: 0.9rem;
-    max-width: 160px;
-    line-height: 1.2;
-    margin-top: 0.6rem; /* Más cerca en tablet */
+    font-size: 0.8rem; /* Más pequeño para que quepa */
+    max-width: 140px; /* Reducir ancho */
+    line-height: 1.15;
+    margin-top: 0.5rem;
   }
 }
 
 @media (max-width: 480px) {
   .Titulo-libro {
-    font-size: 0.85rem;
-    max-width: 150px;
-    margin-top: 0.4rem; /* Más cerca en móvil */
+    font-size: 0.75rem; /* Aún más pequeño */
+    max-width: 130px;
+    margin-top: 0.3rem;
     line-height: 1.1;
   }
 }
@@ -670,13 +670,13 @@ html, body {
 /* Responsive para portadas */
 @media (max-width: 768px) {
   .Portada {
-    width: 90px; /* Tamaño adecuado para 2 columnas en móvil */
+    width: 75px; /* Más pequeño para que quepan mejor en 2 columnas */
   }
 }
 
 @media (max-width: 480px) {
   .Portada {
-    width: 80px; /* Tamaño compacto para móviles pequeños */
+    width: 70px; /* Tamaño compacto para móviles pequeños */
   }
 }
 /* (Titulo-libro definido arriba with animation & styles) */

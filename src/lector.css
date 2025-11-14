@@ -1111,6 +1111,24 @@
   align-items: center;
 }
 
+/* Indentación para subcapítulos */
+.Index-item[data-level="1"] {
+  padding-left: 2.5rem;
+  font-size: 0.9rem;
+}
+
+.Index-item[data-level="2"] {
+  padding-left: 3.5rem;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.Index-item[data-level="3"] {
+  padding-left: 4.5rem;
+  font-size: 0.8rem;
+  color: #888;
+}
+
 .Index-item:hover {
   background: rgba(107, 115, 255, 0.08);
   border-left: 3px solid #6B73FF;

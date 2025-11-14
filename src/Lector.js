@@ -1,1057 +1,968 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+/**
+ * LECTOR - Componente principal para leer libros EPUB
+ * 
+ * Características:
+ * - Lectura de libros en formato EPUB
+ * - Navegación por páginas con flechas
+ * - Ajustes de texto (fuente, tamaño, espaciado)
+ * - Temas de color (claro, sepia, oscuro)
+ * - Grabación de sesión con cámara
+ * - Integración con Gazepoint para seguimiento ocular
+ * - Sistema de bloques de lectura (5 bloques de 5 minutos)
+ * - Índice navegable con búsqueda
+ */
+
+import React, { useEffect, useRef, useState } from 'react';
 import ePub from 'epubjs';
 import './lector.css';
-import { useBuildPrefsCss, useInjectCssIntoContents, useApplyPrefsToRendition } from './hooks/usePreferences';
-import { useNavigation } from './hooks/useNavigation';
 import { useGazepoint } from './hooks/useGazepoint';
+import { useGazeHighlight } from './hooks/useGazeHighlight';
 
 export default function Lector(props) {
   const { archivo, onClose } = props;
-
-  // Debug flag
-  const DEBUG = true;
-
-  // Función para reaplicar estilos (simplificada como backup)
-  const reapplyAdaptiveStyles = useCallback(async () => {
-    const rendition = renditionRef.current;
-    if (!rendition || !mountedRef.current) return;
-
-    try {
-      // Simplemente aplicar las preferencias como en backup
-      applyPrefsToRendition(rendition, prefs);
-    } catch (e) {
-      if (DEBUG) console.warn('[reader] Error reaplicando estilos adaptativos:', e);
-    }
-  }, [prefs, applyPrefsToRendition]);
-
-  // Referencias principales
+  
+  // ============ REFERENCIAS ============
   const viewerRef = useRef(null);
   const bookRef = useRef(null);
   const renditionRef = useRef(null);
-  const mountedRef = useRef(true);
-  const resizeObserverRef = useRef(null);
-
-  // Estados generales del lector
-  const [isTwoPages, setIsTwoPages] = useState(false); // Comienza en modo una página
-  const [progress, setProgress] = useState(0); // 0..100
-  const [ready, setReady] = useState(false);
-  const [totalLocations, setTotalLocations] = useState(0);
-  
-  // Estados de UI
-  const [showSettings, setShowSettings] = useState(false);
-  const [activeTab, setActiveTab] = useState('texto');
-  const [showPageArrows, setShowPageArrows] = useState(false);
-  
-  // Estados de grabación
-  const [isRecording, setIsRecording] = useState(false);
-  
-  // Referencias para control de estado
-  const locationsReadyRef = useRef(false);
-  const progressRef = useRef(0);
-  const hideArrowsTimerRef = useRef(null);
-  const videoPreviewRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
-
-  // Preference hooks y estado
-  const buildPrefsCss = useBuildPrefsCss();
-  const injectCssIntoContents = useInjectCssIntoContents(DEBUG);
-  const applyPrefsToRendition = useApplyPrefsToRendition(buildPrefsCss, injectCssIntoContents, DEBUG);
-
-  const [prefs, setPrefs] = useState(() => {
-    const savedPrefs = localStorage.getItem('readerPrefs');
-    return savedPrefs ? JSON.parse(savedPrefs) : {
-      font: 'original',
-      fontSize: 100,
-      lineHeight: 1.45,
-      theme: 'light',
-      brightness: 1.0
-    };
+  const blockTimerRef = useRef(null);
+  const blockStartTime = useRef(null);
+  
+  // ============ ESTADOS DEL LIBRO ============
+  const [ready, setReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [bookTitle, setBookTitle] = useState('Cargando...');
+  const [bookIndex, setBookIndex] = useState([]);
+  
+  // ============ ESTADOS DE UI ============
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState('texto');
+  const [showIndexModal, setShowIndexModal] = useState(false);
+  const [indexSearch, setIndexSearch] = useState('');
+  
+  // ============ ESTADOS DE GRABACIÓN ============
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [enableGazeHighlight, setEnableGazeHighlight] = useState(false);
+  
+  // ============ ESTADOS DE BLOQUES DE LECTURA ============
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [currentBlock, setCurrentBlock] = useState(1);
+  const [blockTimer, setBlockTimer] = useState(0);
+  const [isBlockActive, setIsBlockActive] = useState(false);
+  const [blockTimerPosition, setBlockTimerPosition] = useState('center');
+  
+  // ============ PREFERENCIAS DE LECTURA ============
+  const [prefs, setPrefs] = useState({
+    fontSize: 100,
+    lineHeight: 1.45,
+    theme: 'light',
+    font: 'original',
+    brightness: 1.0
   });
 
-  // Gestión de flechas de navegación
-  const handleMouseMove = useCallback(() => {
-    // Keep arrows visible while the mouse is over the reader area.
-    // We show arrows on mouse move/enter and rely on onMouseLeave to hide them.
-    setShowPageArrows(true);
-    if (hideArrowsTimerRef.current) {
-      clearTimeout(hideArrowsTimerRef.current);
-      hideArrowsTimerRef.current = null;
-    }
-  }, []);
+  // ============ HOOKS PERSONALIZADOS ============
+  const { startRecording: startGaze, stopRecording: stopGaze, isConnected: gazeConnected } = useGazepoint();
+  useGazeHighlight(viewerRef, enableGazeHighlight && gazeConnected);
 
-  // Función para actualizar el progreso desde la ubicación actual
-  const updateProgressFromRendition = useCallback(async (locObj) => {
-    const rendition = renditionRef.current;
-    const book = bookRef.current;
-    if (!book || !rendition) return;
-
-    try {
-      if (!locationsReadyRef.current) {
-        await book.locations.generate(300);
-        locationsReadyRef.current = true;
-        setTotalLocations(book.locations.length());
-      }
-
-      const loc = locObj || (rendition.currentLocation && rendition.currentLocation());
-      if (!loc) return;
-
-      const cfi = (loc.start ? loc.start.cfi : loc.cfi) || null;
-      if (!cfi || !book.locations) return;
-
-      const progress = book.locations.percentageFromCfi(cfi) * 100;
-      setProgress(Number(progress.toFixed(2)));
-      progressRef.current = progress;
-
-      if (DEBUG) console.debug('[reader] progress updated:', progress.toFixed(2));
-      
-      // Asegurar que las flechas sean visibles después de actualizar el progreso
-      handleMouseMove();
-    } catch (e) {
-      if (DEBUG) console.warn('[reader] progress update error:', e);
-    }
-  }, [DEBUG, setProgress, setTotalLocations, handleMouseMove]);
-
-  // Sistema de navegación
-  const { goNext: baseGoNext, goPrev: baseGoPrev, goToLocation } = useNavigation(
-    renditionRef,
-    bookRef,
-    DEBUG,
-    updateProgressFromRendition
-  );
-
-  const goNext = useCallback(() => {
-    if (!mountedRef.current) return;
-    
-    if (isTwoPages) {
-      try {
-        baseGoNext();
-        baseGoNext();
-      } catch (e) {
-        if (DEBUG) console.warn('[reader] goNext error, attempting safe fallback', e);
-        const r = renditionRef.current;
-        if (r && r.display) {
-          // try a safe redisplay to recover
-          try { r.display(); } catch (err) { if (DEBUG) console.warn('[reader] fallback display failed', err); }
-        }
-      }
-    } else {
-      try {
-        baseGoNext();
-      } catch (e) {
-        if (DEBUG) console.warn('[reader] goNext error, attempting safe fallback', e);
-        const r = renditionRef.current;
-        if (r && r.display) {
-          try { r.display(); } catch (err) { if (DEBUG) console.warn('[reader] fallback display failed', err); }
-        }
-      }
-    }
-  }, [isTwoPages, baseGoNext]);
-
-  const goPrev = useCallback(() => {
-    if (!mountedRef.current) return;
-    
-    if (isTwoPages) {
-      try {
-        baseGoPrev();
-        baseGoPrev();
-      } catch (e) {
-        if (DEBUG) console.warn('[reader] goPrev error, attempting safe fallback', e);
-        const r = renditionRef.current;
-        if (r && r.display) {
-          try { r.display(); } catch (err) { if (DEBUG) console.warn('[reader] fallback display failed', err); }
-        }
-      }
-    } else {
-      try {
-        baseGoPrev();
-      } catch (e) {
-        if (DEBUG) console.warn('[reader] goPrev error, attempting safe fallback', e);
-        const r = renditionRef.current;
-        if (r && r.display) {
-          try { r.display(); } catch (err) { if (DEBUG) console.warn('[reader] fallback display failed', err); }
-        }
-      }
-    }
-  }, [isTwoPages, baseGoPrev]);
-
-  // Keyboard navigation
-  useEffect(() => {
-    function handleKeyPress(e) {
-      if (!ready) return;
-      
-      switch (e.key) {
-        case 'ArrowRight':
-          goNext();
-          break;
-        case 'ArrowLeft':
-          goPrev();
-          break;
-        default:
-          break;
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [ready, goNext, goPrev]);
-
-  // eslint-disable-next-line no-unused-vars
-  const handleResize = useCallback((renditionArg) => {
-    const rendition = renditionArg || renditionRef.current;
-    if (!rendition?.manager?.container || !mountedRef.current) return;
-
-    requestAnimationFrame(() => {
-      if (!mountedRef.current) return;
-      
-      try {
-        rendition.resize();
-        if (DEBUG) console.debug('[reader] resize applied');
-        
-        // Re-aplicar preferencias después del resize
-        applyPrefsToRendition(rendition, prefs);
-      } catch (e) {
-        if (DEBUG) console.warn('[reader] resize error:', e);
-      }
-    });
-  }, [DEBUG, prefs, applyPrefsToRendition]);
-
-  // Handler de resize seguro con debounce y RAF
-  const safeRenditionResize = useCallback(async (renditionArg) => {
-    const rendition = renditionArg || renditionRef.current;
-    if (!rendition?.manager?.container || !mountedRef.current || !rendition.display) return;
-    
-    return new Promise((resolve) => {
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-      }
-      
-      requestAnimationFrame(() => {
-        try {
-          if (mountedRef.current) {
-            rendition.resize();
-            applyPrefsToRendition(rendition, prefs);
-          }
-        } catch (e) {
-          if (DEBUG) console.warn('[reader] resize error:', e);
-        }
-        resolve();
-      });
-    });
-  }, [DEBUG, prefs, applyPrefsToRendition]);
-
-
-
-  // Función para actualizar preferencias
-  const updatePref = useCallback((newPref) => {
-    setPrefs(prev => {
-      const updated = { ...prev, ...newPref };
-      localStorage.setItem('readerPrefs', JSON.stringify(updated));
-      return updated;
-    });
-  }, []);
-
-  // Función para aplicar preferencias a todos los elementos
-  const applyPrefsToAll = useCallback((prefs) => {
+  // ============ FUNCIONES DE APLICACIÓN DE ESTILOS ============
+  
+  /**
+   * Aplica las preferencias de usuario al libro (fuente, tema, tamaño, etc.)
+   * Se ejecuta cada vez que cambian las preferencias o se navega a una nueva página
+   */
+  const applyPrefsToBook = React.useCallback(() => {
     const rendition = renditionRef.current;
     if (!rendition) return;
-    applyPrefsToRendition(rendition, prefs);
-  }, [applyPrefsToRendition]);
-
-  // Handlers que actualizan estado y aplican inmediatamente
-  const handleFontChange = useCallback((font) => {
-    updatePref({ font });
-  }, [updatePref]);
-
-  const handleFontSizeChange = useCallback((value) => {
-    updatePref({ fontSize: Number(value) });
-  }, [updatePref]);
-
-  const handleLineHeightChange = useCallback((percentValue) => {
-    updatePref({ lineHeight: Number(percentValue) / 100 });
-  }, [updatePref]);
-
-  const handleBrightnessChange = useCallback((value) => {
-    const b = Math.max(0.5, Math.min(1.2, Number(value) / 100));
-    updatePref({ brightness: b });
-  }, [updatePref]);
-
-  const handleThemeChange = useCallback((theme) => {
-    updatePref({ theme });
-  }, [updatePref]);
-
-  // aplicar prefs cuando cambian y cuando el rendition esté listo
-  useEffect(() => {
-    applyPrefsToAll(prefs);
-  }, [prefs, applyPrefsToAll]);
-
-  // Efecto para limpiar el timer de flechas al desmontar
-  useEffect(() => {
-    return () => {
-      if (hideArrowsTimerRef.current) {
-        clearTimeout(hideArrowsTimerRef.current);
-        hideArrowsTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  // Efecto para manejar cambios de orientación/tamaño (como Google Play Libros)
-  useEffect(() => {
-    let resizeTimeout;
     
-    const handleAdaptiveResize = () => {
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(async () => {
-        const rendition = renditionRef.current;
-        if (!rendition || !mountedRef.current) return;
-        
-        try {
-          // Reconfigurar estilos adaptativos
-          await reapplyAdaptiveStyles();
-          if (DEBUG) console.log('[reader] Estilos adaptativos reaplicados por cambio de tamaño');
-        } catch (e) {
-          if (DEBUG) console.warn('[reader] Error reaplicando estilos adaptativos:', e);
-        }
-      }, 300); // Debounce de 300ms
+    const fontMap = {
+      original: 'serif',
+      sans: 'system-ui, -apple-system, "Segoe UI", Roboto',
+      merri: '"Merriweather", Georgia, serif'
     };
+    
+    const css = `
+      body {
+        font-family: ${fontMap[prefs.font]} !important;
+        font-size: ${prefs.fontSize}% !important;
+        line-height: ${prefs.lineHeight}!important;
+        background: ${prefs.theme === 'dark' ? '#0b0c0c' : prefs.theme === 'sepia' ? '#f4ecd8' : '#ffffff'} !important;
+        color: ${prefs.theme === 'dark' ? '#e8f6f5' : '#222222'} !important;
+        filter: brightness(${prefs.brightness}) !important;
+        padding: 20px !important;
+      }
+      img {
+        max-width: 100% !important;
+        height: auto !important;
+      }
+    `;
+    
+    try {
+      // Inyectar CSS directamente en el iframe
+      setTimeout(() => {
+        const iframes = document.querySelectorAll('iframe');
+        iframes.forEach(iframe => {
+          try {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+            if (iframeDoc && iframeDoc.body) {
+              // Remover style anterior si existe
+              const oldStyle = iframeDoc.getElementById('epub-user-prefs');
+              if (oldStyle) oldStyle.remove();
+              
+              // Crear nuevo style
+              const style = iframeDoc.createElement('style');
+              style.id = 'epub-user-prefs';
+              style.textContent = css;
+              iframeDoc.head.appendChild(style);
+              
+              // Asegurar visibilidad del contenido
+              if (iframeDoc.body) {
+                iframeDoc.body.style.visibility = 'visible';
+                iframeDoc.body.style.opacity = '1';
+              }
+            }
+          } catch (e) {
+            console.log('[lector] No se pudo acceder al iframe:', e);
+          }
+        });
+      }, 100);
+    } catch (e) {
+      console.log('[lector] Error aplicando estilos:', e);
+    }
+  }, [prefs]);
 
-    window.addEventListener('resize', handleAdaptiveResize);
-    window.addEventListener('orientationchange', handleAdaptiveResize);
-
-    return () => {
-      window.removeEventListener('resize', handleAdaptiveResize);
-      window.removeEventListener('orientationchange', handleAdaptiveResize);
-      clearTimeout(resizeTimeout);
-    };
-  }, [reapplyAdaptiveStyles, DEBUG]);
-
-  // Inicialización y cleanup
+  // Inicializar libro
   useEffect(() => {
     if (!archivo) return;
-
-    // Siempre empezar en modo una página
-    setIsTwoPages(false);
-    mountedRef.current = true;
+    let mounted = true;
     
-    // Limpiar ResizeObserver anterior
-    if (resizeObserverRef.current) {
-      resizeObserverRef.current.disconnect();
-      resizeObserverRef.current = null;
-    }
+    // Resetear estados de carga
+    setIsLoading(true);
+    setReady(false);
 
-    const initBook = async () => {
-      if (!mountedRef.current) return;
-
+    const init = async () => {
       try {
-        // Limpiar cualquier instancia previa
-        if (renditionRef.current) {
-          try {
-            renditionRef.current.destroy();
-          } catch (e) {
-            if (DEBUG) console.warn('[reader] error destroying rendition:', e);
-          }
-          renditionRef.current = null;
-        }
-
-        if (bookRef.current) {
-          try {
-            bookRef.current.destroy();
-          } catch (e) {
-            if (DEBUG) console.warn('[reader] error destroying book:', e);
-          }
-          bookRef.current = null;
-        }
-        
-        // Detener ResizeObserver anterior si existe
-        if (resizeObserverRef.current) {
-          resizeObserverRef.current.disconnect();
-          resizeObserverRef.current = null;
-        }
-        
-        // Crear y cargar el libro
-        if (DEBUG) {
-          console.log('Creando nueva instancia del libro...', {
-            archivo,
-            tipo: typeof archivo,
-            url: archivo instanceof Blob ? URL.createObjectURL(archivo) : archivo
-          });
-        }
         const book = ePub(archivo);
         bookRef.current = book;
-        
-        // Esperar a que el libro esté completamente cargado
-        if (DEBUG) console.log('Esperando a que el libro esté listo...');
         await book.ready;
-        if (DEBUG) {
-          console.log('Libro cargado:', {
-            spine: book.spine.length,
-            metadata: book.package.metadata
-          });
-        }
-        
-        if (!mountedRef.current) return;
+        if (!mounted) return;
 
-        // Crear el rendition con configuración simple (como backup)
+        // -------- EXTRAER METADATOS DEL LIBRO --------
+        const metadata = book.packaging.metadata;
+        const title = metadata.title || archivo.split('/').pop().replace('.epub', '') || 'Libro sin título';
+        setBookTitle(title);
+
+        // -------- EXTRAER ÍNDICE/TABLA DE CONTENIDOS --------
+        // Incluye capítulos y subcapítulos de manera recursiva
+        const navigation = book.navigation;
+        if (navigation && navigation.toc) {
+          /**
+           * Función recursiva para extraer todos los capítulos y subcapítulos
+           * @param {Array} toc - Array de elementos del índice
+           * @param {string} parentIndex - ID del capítulo padre (ej: "1.2")
+           * @returns {Array} Array plano con todos los capítulos y subcapítulos
+           */
+          const extractAllChapters = (toc, parentIndex = '') => {
+            const chapters = [];
+            toc.forEach((item, index) => {
+              const chapterId = parentIndex ? `${parentIndex}.${index + 1}` : `${index + 1}`;
+              chapters.push({
+                id: chapterId,
+                label: item.label,
+                href: item.href,
+                cfi: item.cfi || null,
+                level: parentIndex ? parentIndex.split('.').length : 0 // Nivel de anidación
+              });
+              // Si tiene subcapítulos, extraerlos recursivamente
+              if (item.subitems && item.subitems.length > 0) {
+                chapters.push(...extractAllChapters(item.subitems, chapterId));
+              }
+            });
+            return chapters;
+          };
+
+          const allChapters = extractAllChapters(navigation.toc);
+          
+          // Preparar items del índice (número de página se calculará después)
+          const indexItems = allChapters.map((item, index) => {
+            return {
+              ...item,
+              id: index,
+              page: null // Se calculará después de generar locations
+            };
+          });
+          
+          setBookIndex(indexItems);
+        }
+
+        // -------- RENDERIZAR LIBRO --------
         const rendition = book.renderTo(viewerRef.current, {
           width: '100%',
           height: '100%',
           flow: 'paginated',
-          spread: 'auto' // Usar la configuración simple del backup
+          spread: 'none' // Una sola columna
         });
-        
         renditionRef.current = rendition;
-        
-        // Esperar a que el rendition esté listo (o timeout)
-        if (DEBUG) console.log('Esperando a que el rendition esté listo...');
-        await Promise.race([
-          new Promise((resolve) => {
-            try {
-              rendition.once('rendered', () => {
-                if (DEBUG) console.log('Rendition rendered event fired');
-                resolve('rendered');
-              });
-            } catch (e) {
-              if (DEBUG) console.warn('[reader] error attaching rendered listener', e);
-              resolve('error');
-            }
-          }),
-          new Promise((resolve) => setTimeout(() => {
-            console.warn('[reader] rendition.rendered timeout after 4000ms, continuing');
-            resolve('timeout');
-          }, 4000))
-        ]);
-        
-        if (!mountedRef.current) return;
 
-        // Ahora cargar el resto de los componentes (no bloquear si alguno tarda)
-        if (DEBUG) console.log('Cargando componentes del libro...');
-        try {
-          const loadedPromises = [
-            book.loaded?.navigation,
-            book.loaded?.metadata,
-            book.loaded?.cover,
-            book.loaded?.spine
-          ].filter(Boolean);
-
-          const settled = await Promise.allSettled(loadedPromises.map(p => (
-            // wrap each promise with a small timeout to avoid indefinite wait
-            Promise.race([p, new Promise((res) => setTimeout(() => res('timeout'), 3000))])
-          )));
-          if (DEBUG) console.log('[reader] loaded components status:', settled);
-        } catch (e) {
-          if (DEBUG) console.warn('[reader] error loading components:', e);
-        }
-
-        // Generar locations antes de mostrar la primera página
+        // -------- GENERAR LOCATIONS (SISTEMA DE PÁGINAS) --------
+        // epubjs genera "locations" que dividen el libro en páginas virtuales
         if (!book.locations.length()) {
-          if (DEBUG) console.log('Generando locations...');
-          await book.locations.generate(300);
-          locationsReadyRef.current = true;
-          setTotalLocations(book.locations.length());
+          console.log('[lector] Generando locations...');
+          await book.locations.generate(256); // 256 caracteres por "location"
+          console.log('[lector] Locations generadas:', book.locations.length());
         }
+        const total = book.locations.length();
+        setTotalPages(total);
 
-        // Mostrar la primera página (con protección)
-        if (DEBUG) console.log('Mostrando primera página...');
-        try {
-          const firstHref = book.spine && book.spine.get && book.spine.get(0) && book.spine.get(0).href;
-          if (firstHref) {
-            await rendition.display(firstHref);
-          } else {
-            await rendition.display();
-          }
-        } catch (err) {
-          if (DEBUG) console.warn('[reader] rendition.display failed, trying fallback', err);
-          try { await rendition.display(); } catch (err2) { if (DEBUG) console.error('[reader] fallback rendition.display also failed', err2); }
-        }
-
-        // Asegurar que estamos en modo una página
-        rendition.spread(false);
-        
-        // Configurar ResizeObserver después de tener el rendition
-        const resizeObserver = new ResizeObserver(() => {
-          if (!mountedRef.current || !renditionRef.current) return;
-          
-          requestAnimationFrame(() => {
-            if (!mountedRef.current || !renditionRef.current) return;
-            
-            try {
-              renditionRef.current.resize();
-              // DESACTIVAR CSS personalizado
-              // applyPrefsToRendition(renditionRef.current, prefs);
-              if (showPageArrows) {
-                handleMouseMove();
+        // -------- CALCULAR NÚMEROS DE PÁGINA DEL ÍNDICE --------
+        // Ahora que tenemos locations, asignamos número de página a cada capítulo
+        if (navigation && navigation.toc && book.locations.length()) {
+          setBookIndex(prevIndex => 
+            prevIndex.map(item => {
+              let pageNumber = null;
+              try {
+                if (item.href) {
+                  const cfi = book.canonical(item.href); // CFI = Canonical Fragment Identifier
+                  const percentage = book.locations.percentageFromCfi(cfi);
+                  pageNumber = Math.floor(percentage * total) + 1;
+                }
+              } catch (e) {
+                console.log('[lector] No se pudo calcular página para:', item.label);
               }
-            } catch (e) {
-              if (DEBUG) console.warn('[reader] resize error:', e);
-            }
-          });
-        });
-
-        if (viewerRef.current) {
-          resizeObserver.observe(viewerRef.current);
-          resizeObserverRef.current = resizeObserver;
+              return { ...item, page: pageNumber };
+            })
+          );
         }
 
-        // Configuración simple y básica - SIN temas personalizados
-        console.log('Rendition creado, aplicando configuración mínima...');
+        // -------- MOSTRAR PRIMERA PÁGINA --------
+        console.log('[lector] Mostrando primera página...');
+        await rendition.display();
+        console.log('[lector] Primera página mostrada');
         
-        // NO aplicar ningún tema personalizado - dejar que ePub.js maneje todo por defecto
-        // Configurar event handlers
-        renditionRef.current.on('relocated', (loc) => {
-          if (!mountedRef.current) return;
-          updateProgressFromRendition(loc).catch(() => {});
-          // DESACTIVAR CSS personalizado
-          // try { applyPrefsToRendition(renditionRef.current, prefs); } catch (e) { if (DEBUG) console.warn('[reader] applyPrefs relocated error', e); }
+        // Ocultar spinner de carga
+        setIsLoading(false);
+
+        // -------- EVENTOS DE RENDITION --------
+        // relocated: se dispara al cambiar de página
+        rendition.on('relocated', (loc) => {
+          const cfi = loc.start?.cfi || loc.cfi;
+          if (cfi && book.locations.length()) {
+            const pct = book.locations.percentageFromCfi(cfi) * 100;
+            setProgress(pct);
+            setCurrentPage(Math.max(1, Math.floor((pct / 100) * total)));
+          }
+          // Aplicar estilos cuando la página cambia
+          setTimeout(() => applyPrefsToBook(), 100);
         });
 
-        renditionRef.current.on('rendered', (section) => {
-          if (!mountedRef.current) return;
-          try {
-            // Aplicar solo las preferencias básicas (tema, fuente) SIN CSS restrictivo
-            applyPrefsToRendition(renditionRef.current, prefs);
-          } catch (e) {
-            if (DEBUG) console.warn('[reader] applyPrefs rendered error', e);
-          }
-          // Ensure internal content exists before touching it
-          try {
-            if (section && section.document) {
-              // set background color inside iframe/doc to reduce white flashes
-              try { section.document.body.style.background = ''; } catch (e) {}
-            }
-          } catch (ee) {
-            if (DEBUG) console.warn('[reader] section safety check failed', ee);
-          }
-          handleMouseMove();
-
-          // Reveal viewer after first render
-          try {
-            if (viewerRef.current) {
-              viewerRef.current.classList.remove('hidden');
-              // small delay to ensure CSS applied
-              setTimeout(() => {
-                if (viewerRef.current) viewerRef.current.classList.add('fade-in');
-              }, 30);
-            }
-          } catch (e) { if (DEBUG) console.warn('[reader] reveal viewer failed', e); }
+        // Asegurar que el libro es visible
+        rendition.on('rendered', () => {
+          console.log('[lector] Página renderizada');
+          applyPrefsToBook();
         });
 
-        // Marcar como listo
         setReady(true);
-      } catch (error) {
-        console.error('[reader] initialization error:', error);
-        setReady(true); // Marcar como ready incluso en error
-      }
-    };    initBook();
-
-    // Cleanup function
-    return () => {
-      mountedRef.current = false;
-      
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
-
-      try {
-        if (renditionRef.current) {
-          renditionRef.current.destroy();
-          renditionRef.current = null;
-        }
-        if (bookRef.current) {
-          bookRef.current.destroy();
-          bookRef.current = null;
-        }
+        console.log('[lector] Libro listo para lectura');
       } catch (e) {
-        if (DEBUG) console.warn('[reader] cleanup error:', e);
+        console.error('Error inicializando libro:', e);
+        setReady(true);
+        setIsLoading(false); // Ocultar carga en caso de error
       }
     };
-  }, [archivo, DEBUG, prefs, applyPrefsToRendition, updateProgressFromRendition, isTwoPages, handleMouseMove, showPageArrows]);
 
-  // limpiar timer de flechas al desmontar
+    init();
+    return () => {
+      mounted = false;
+      try {
+        if (renditionRef.current) renditionRef.current.destroy();
+        if (bookRef.current) bookRef.current.destroy();
+      } catch (_) {}
+    };
+  }, [archivo, applyPrefsToBook]);
+
+  // Aplicar estilos cuando cambien las preferencias
+  useEffect(() => {
+    if (ready) {
+      applyPrefsToBook();
+    }
+  }, [prefs, applyPrefsToBook, ready]);
+
+  // Si Gazepoint se desconecta durante grabación, detener
+  useEffect(() => {
+    if (!gazeConnected && isRecording) {
+      console.warn('[lector] Gazepoint desconectado, deteniendo grabación');
+      stopRecording();
+    }
+  }, [gazeConnected, isRecording]);
+
+  // Si Gazepoint se desconecta, desactivar subrayado ocular
+  useEffect(() => {
+    if (!gazeConnected && enableGazeHighlight) {
+      console.warn('[lector] Gazepoint desconectado, desactivando subrayado ocular');
+      setEnableGazeHighlight(false);
+    }
+  }, [gazeConnected, enableGazeHighlight]);
+
+  // Limpiar timer de bloques al desmontar componente
   useEffect(() => {
     return () => {
-      if (hideArrowsTimerRef.current) {
-        clearTimeout(hideArrowsTimerRef.current);
-        hideArrowsTimerRef.current = null;
+      if (blockTimerRef.current) {
+        clearInterval(blockTimerRef.current);
+        blockTimerRef.current = null;
       }
     };
   }, []);
 
-  // cambiar entre 1 y 2 páginas y configurar spread
-  useEffect(() => {
+  // ============ FUNCIONES DE NAVEGACIÓN ============
+  
+  /**
+   * Avanza a la siguiente página del libro
+   */
+  const goNext = () => {
+    if (!renditionRef.current) return;
+    renditionRef.current.next().catch(() => {});
+  };
+
+  /**
+   * Retrocede a la página anterior del libro
+   */
+  const goPrev = () => {
+    if (!renditionRef.current) return;
+    renditionRef.current.prev().catch(() => {});
+  };
+
+  /**
+   * Abre el modal del índice del libro
+   */
+  const openIndex = () => {
+    setShowIndexModal(true);
+    setIndexSearch(''); // Limpiar búsqueda al abrir
+  };
+
+  /**
+   * Navega a un capítulo específico del índice
+   * @param {Object} item - Item del índice con propiedad href
+   */
+  const navigateToChapter = (item) => {
     const rendition = renditionRef.current;
-    if (!rendition) return;
-
-    // Función que actualiza el layout basado en el modo de visualización
-    async function updateLayout() {
-      try {
-        if (isTwoPages) {
-          rendition.spread('both');
-        } else {
-          rendition.spread(false);
-        }
-        await rendition.display();
-        const containerClass = isTwoPages ? 'two-pages' : 'single-page';
-        viewerRef.current.className = `Lector-viewer ${containerClass}`;
-
-        if (isTwoPages) {
-          // Primero limpiar el rendition actual
-          await rendition.clear();
-          
-          // Configurar el spread para dos páginas
-          rendition.settings.spread = true;
-          rendition._layout.spread = true;
-          rendition.spread('both');
-          
-          // Re-renderizar la página actual
-          await rendition.display();
-        } else {
-          // Limpiar y configurar para una página
-          await rendition.clear();
-          rendition.settings.spread = false;
-          rendition._layout.spread = false;
-          rendition.spread(false);
-          
-          // Re-renderizar la página actual
-          await rendition.display();
-        }
-        
-        // Dar tiempo para que el cambio se aplique
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        // CSS específico para cada modo
-        const css = isTwoPages ? `
-          .epub-container {
-            background: white !important;
-          }
-          .epub-view {
-            display: flex !important;
-            width: 100% !important;
-            justify-content: center !important;
-          }
-          .epub-view > iframe {
-            width: 50% !important;
-            max-width: 50% !important;
-            margin: 0 !important;
-          }
-        ` : `
-          .epub-container {
-            background: white !important;
-          }
-          .epub-view {
-            display: block !important;
-            width: 100% !important;
-          }
-          .epub-view > iframe {
-            width: 100% !important;
-            margin: 0 auto !important;
-            display: block !important;
-          }
-        `;
-
-        // Aplicar CSS
-        await injectCssIntoContents(rendition, css);
-        
-        // Realizar el resize después de aplicar el CSS
-        await safeRenditionResize();
-
-        // Re-mostrar en la ubicación actual para asegurar el layout correcto
-        const loc = rendition.currentLocation();
-        if (loc) {
-          const cfi = loc.start ? loc.start.cfi : loc.cfi;
-          if (cfi) {
-            await rendition.display(cfi);
-          }
-        }
-      } catch (e) {
-        console.warn('Error al cambiar modo de visualización:', e);
-      }
+    if (rendition && item.href) {
+      rendition.display(item.href).catch(() => {});
+      setShowIndexModal(false);
     }
+  };
 
-    if (rendition.manager?.container) {
-      updateLayout();
-    }
-  }, [isTwoPages, renditionRef, bookRef, safeRenditionResize, injectCssIntoContents, DEBUG]);
+  // Filtrar capítulos según búsqueda en el índice
+  const filteredIndex = bookIndex.filter(item =>
+    item.label.toLowerCase().includes(indexSearch.toLowerCase())
+  );
 
-  // Recalcular ubicaciones cuando cambian ajustes que afectan el layout
-  useEffect(() => {
+  /**
+   * Vuelve al inicio del libro (primera página)
+   */
+  const goToStart = () => {
     const book = bookRef.current;
     const rendition = renditionRef.current;
-    if (!book?.locations || !rendition) return;
-    let alive = true;
-
-    (async () => {
-        try {
-          // esperar un momento para que el CSS aplicado tenga efecto
-          await new Promise((r) => setTimeout(r, 120));
-          // regenerar localizaciones con mayor resolución
-          await book.locations.generate(300);
-          locationsReadyRef.current = true;
-          if (!alive || !book?.locations) return;
-          const total = book.locations.length();
-          setTotalLocations(total || 0);
-          // actualizar progreso basado en la ubicación actual
-          if (alive) {
-            await updateProgressFromRendition();
-            // Asegurar que las flechas sean visibles después de actualizar el layout
-            handleMouseMove();
-          }
-        } catch (e) {
-          // ignore
-        }
-    })();
-
-    return () => { alive = false; };
-  }, [prefs.fontSize, prefs.lineHeight, isTwoPages, updateProgressFromRendition, handleMouseMove]);
-
-  // Toggle settings panel
-  const toggleSettings = useCallback(() => {
-    setShowSettings(prev => !prev);
-  }, []);
-
-  // Recording functions
-  const { startRecording: startGazeTracking, stopRecording: stopGazeTracking } = useGazepoint();
-  
-  const startRecording = useCallback(async () => {
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        console.error('getUserMedia no soportado');
-        return;
+    if (book && rendition && book.spine.length) {
+      const firstHref = book.spine.get(0)?.href;
+      if (firstHref) {
+        rendition.display(firstHref).catch(() => {});
       }
+    }
+  };
 
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const recordingPath = `recordings/${timestamp}`;
-
-      // Iniciar eye tracking
-      startGazeTracking(recordingPath);
-
+  // ============ FUNCIONES DE GRABACIÓN ============
+  
+  /**
+   * Inicia la grabación de video de la sesión de lectura
+   * Usa MediaRecorder API y sincroniza con el sistema Gazepoint
+   */
+  const startRecording = async () => {
+    try {
+      // Generar timestamp único para identificar esta sesión
+      const recordingTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      
+      // Solicitar acceso a la cámara
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       streamRef.current = stream;
 
+      // Configurar grabador de video
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+      // Guardar timestamp en el recorder para usarlo al terminar
+      mediaRecorderRef.current.recordingTimestamp = recordingTimestamp;
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
+      // Acumular fragmentos de video conforme se graban
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
-      mediaRecorder.onstop = async () => {
-        try {
-          const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-          const formData = new FormData();
-          const videoBlob = new Blob([blob], { type: 'video/webm' });
-          formData.append('video', videoBlob, `${timestamp}.webm`);
-          
-          const response = await fetch('http://localhost:3001/api/upload', {
-            method: 'POST',
-            body: formData,
-          });
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Error de servidor:', errorText);
-            throw new Error('Error al guardar la grabación');
-          }
+      // Al iniciar grabación: sincronizar con Gazepoint
+      mediaRecorder.onstart = () => {
+        startGaze(recordingTimestamp); // Iniciar eye-tracking con mismo timestamp
+        setIsRecording(true);
+        console.log('Grabación iniciada:', recordingTimestamp);
+      };
 
-          // Detener eye tracking después de guardar el video
-          stopGazeTracking();
-          
-          chunksRef.current = [];
-        } catch (error) {
-          console.error('Error saving recording:', error);
-          stopGazeTracking(); // Asegurar que el eye tracking se detiene incluso en error
+      // Al detener grabación: subir video al servidor
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        const sessionTimestamp = mediaRecorderRef.current.recordingTimestamp;
+        const fd = new FormData();
+        fd.append('video', blob, `${sessionTimestamp}.webm`);
+        fd.append('sessionId', sessionTimestamp); // ID de sesión para correlacionar con datos de Gazepoint
+        try {
+          await fetch('/api/upload', { method: 'POST', body: fd });
+          stopGaze(); // Detener eye-tracking
+        } catch (e) {
+          console.error('Error upload:', e);
+          stopGaze();
         }
+        chunksRef.current = [];
       };
 
       mediaRecorder.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error('Error starting recording:', error);
+      // No establecer isRecording aquí, se hace en onstart
+    } catch (e) {
+      console.error('Error recording:', e);
     }
-  }, [startGazeTracking, stopGazeTracking]);
+  };
 
-  const stopRecording = useCallback(() => {
-    const mediaRecorder = mediaRecorderRef.current;
-    const stream = streamRef.current;
-
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      mediaRecorder.stop();
+  /**
+   * Detiene la grabación de video y cierra la cámara
+   */
+  const stopRecording = () => {
+    if (mediaRecorderRef.current?.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
     }
-
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
+    // Liberar recursos de la cámara
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
     }
-
-    if (videoPreviewRef.current) {
-      videoPreviewRef.current.srcObject = null;
-      videoPreviewRef.current.style.display = 'none';
-    }
-
     setIsRecording(false);
-    mediaRecorderRef.current = null;
-    streamRef.current = null;
-  }, []);
+    setIsPaused(false);
+  };
 
-  // goToStart utiliza hook de navegación
-  const goToStart = useCallback(() => {
-    const r = renditionRef.current;
-    if (!r || !r.display) return;
-    goToLocation();
-  }, [goToLocation]);
-
-  const onPageSliderChange = useCallback((e) => {
-    if (showSettings) return;
-    const page = Number(e.target.value);
-    const book = bookRef.current;
-    if (!book?.locations || !locationsReadyRef.current) return;
-    
-    try {
-      const total = book.locations.length() || 1;
-      const cfi = book.locations.cfiFromPercentage((page - 0.5) / total);
-      setProgress(Number(((page - 0.5) / total * 100).toFixed(2)));
-      goToLocation(cfi);
-    } catch (err) {
-      if (DEBUG) console.warn('[reader] navigation error:', err);
+  /**
+   * Pausa la grabación (sin detenerla completamente)
+   */
+  const pauseRecording = () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.pause();
+      setIsPaused(true);
     }
-  }, [DEBUG, setProgress, goToLocation, showSettings]);
+  };
 
-  // Página actual y total (basado en locations); progreso es 0..100
-  const totalPages = totalLocations || 0;
-  const currentPage = (() => {
-    if (!totalPages) return 0;
-    const r = renditionRef.current;
+  /**
+   * Resume una grabación pausada
+   */
+  const resumeRecording = () => {
+    if (mediaRecorderRef.current?.state === 'paused') {
+      mediaRecorderRef.current.resume();
+      setIsPaused(false);
+    }
+  };
+
+  // ============ NAVEGACIÓN POR SLIDER ============
+  
+  /**
+   * Navega a una página específica usando el slider
+   * @param {Event} e - Evento del input range
+   */
+  const handleSliderChange = (e) => {
+    const page = parseInt(e.target.value, 10);
     const book = bookRef.current;
-    const hasLocations = book && book.locations && locationsReadyRef.current;
-    const canUsePercentage = r && typeof book?.locations?.percentageFromCfi === 'function';
+    const rendition = renditionRef.current;
+    if (book && rendition && book.locations.length()) {
+      const pct = (page - 1) / totalPages; // Convertir página a porcentaje
+      const cfi = book.locations.cfiFromPercentage(pct); // Obtener CFI de esa posición
+      rendition.display(cfi).catch(() => {});
+    }
+  };
+
+  const updatePref = (newPref) => {
+    setPrefs(prev => ({ ...prev, ...newPref }));
+  };
+
+  // ============ SISTEMA DE BLOQUES DE LECTURA ============
+  // El usuario puede configurar bloques de 5 minutos para organizar su lectura
+  
+  /**
+   * Inicia un bloque de lectura (cronómetro de 5 minutos)
+   */
+  const startBlockTimer = () => {
+    if (blockTimerRef.current) return; // Ya hay un timer activo
     
-    if (hasLocations && canUsePercentage) {
-      try {
-        const loc = r.currentLocation && r.currentLocation();
-        const cfi = loc && ((loc.start ? loc.start.cfi : loc.cfi) || null);
-        if (cfi) {
-          const pct = book.locations.percentageFromCfi(cfi);
-          const idx = Math.min(totalPages - 1, Math.max(0, Math.floor(pct * totalPages)));
-          return idx + 1;
-        }
-      } catch (e) {
-        if (DEBUG) console.warn('[reader] currentPage compute error:', e);
+    blockStartTime.current = Date.now();
+    setBlockTimer(0);
+    setIsBlockActive(true);
+    
+    // Animar el cronómetro al área inferior derecha
+    setTimeout(() => {
+      setBlockTimerPosition('bottom');
+    }, 500);
+    
+    // Actualizar cronómetro cada segundo
+    blockTimerRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - blockStartTime.current) / 1000);
+      setBlockTimer(elapsed);
+      
+      // Si han pasado 5 minutos (300 segundos), terminar el bloque
+      if (elapsed >= 300) {
+        endCurrentBlock();
       }
+    }, 1000);
+  };
+
+  /**
+   * Finaliza el bloque actual y avanza al siguiente
+   */
+  const endCurrentBlock = () => {
+    if (blockTimerRef.current) {
+      clearInterval(blockTimerRef.current);
+      blockTimerRef.current = null;
     }
-    return Math.max(1, Math.min(totalPages, Math.ceil((progress / 100) * totalPages)));
-  })();
+    
+    setIsBlockActive(false);
+    setBlockTimerPosition('center');
+    
+    // Si es el bloque 5, reiniciar desde 1. Si no, pasar al siguiente
+    if (currentBlock >= 5) {
+      setCurrentBlock(1);
+    } else {
+      setCurrentBlock(prev => prev + 1);
+    }
+    
+    // Mostrar modal para el siguiente bloque
+    setShowBlockModal(true);
+  };
+
+  /**
+   * Cancela la actividad de bloques completamente
+   */
+  const cancelBlockActivity = () => {
+    if (blockTimerRef.current) {
+      clearInterval(blockTimerRef.current);
+      blockTimerRef.current = null;
+    }
+    
+    setIsBlockActive(false);
+    setBlockTimerPosition('center');
+    setShowBlockModal(false);
+    setCurrentBlock(1); // Reiniciar al bloque 1
+  };
+
+  /**
+   * Formatea segundos a MM:SS
+   * @param {number} seconds - Segundos a formatear
+   * @returns {string} Tiempo formateado (ej: "05:23")
+   */
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const getTimestamp = () => {
+    return new Date().toLocaleTimeString('es-ES', { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit' 
+    });
+  };
 
   return (
-    <div className="Lector-overlay" onClick={() => setShowSettings(false)}>
-      <div className="Lector-panel">
-        <header className="Lector-header">
-          <div className="Lector-title">Lector</div>
-          <div className="Lector-controls">
-            <label className="Switch">
-              <input
-                type="checkbox"
-                checked={isTwoPages}
-                onChange={() => setIsTwoPages(v => !v)}
-              />
-              <span className="Slider-visual" />
-              <span className="Switch-label">{isTwoPages ? '2 páginas' : '1 página'}</span>
-            </label>
+    <div className="Lector-overlay" onClick={onClose}>
+      <div className="Lector-panel" onClick={(e) => e.stopPropagation()}>
+        {/* Barra de grabación flotante centrada en la parte superior */}
+        <div className="Recording-bar">
+          {/* Botón de subrayado por detección ocular */}
+          <button
+            className={`gaze-btn ${enableGazeHighlight ? 'active' : ''} ${!gazeConnected ? 'disabled' : ''}`}
+            onClick={() => gazeConnected && setEnableGazeHighlight(!enableGazeHighlight)}
+            disabled={!gazeConnected}
+            title={
+              !gazeConnected 
+                ? 'Gazepoint no conectado' 
+                : enableGazeHighlight 
+                  ? 'Desactivar subrayado ocular' 
+                  : 'Activar subrayado ocular'
+            }
+          >
+            👁️
+          </button>
 
-            <button 
-              className="HeaderBtn" 
-              onClick={goToStart} 
-              title="Inicio"
-              style={{
-                width: '42px',
-                height: '42px',
-                background: '#ffffff',
-                border: '1px solid #e6e6e6',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '1.2rem',
-                color: '#1b5e5a',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-              }}
-            >⤺</button>
-
-            {/* botón de ajustes que abre popup */}
-            <button 
-              className="HeaderBtn" 
-              onClick={(e) => { e.stopPropagation(); toggleSettings(); }} 
-              title="Ajustes"
-              style={{
-                width: '42px',
-                height: '42px',
-                background: '#ffffff',
-                border: '1px solid #e6e6e6',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '1.2rem',
-                color: '#1b5e5a',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-              }}
-            >A</button>
-
-            <button 
-              className="HeaderBtn close" 
-              onClick={onClose} 
-              title="Cerrar"
-              style={{
-                width: '42px',
-                height: '42px',
-                background: '#ff4757',
-                border: '1px solid #ff6b6b',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '1.2rem',
-                color: '#ffffff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-              }}
-            >✕</button>
-          </div>
-
-          {/* POPUP: ajustes de lectura */}
-          {showSettings && (
-            <div className="Settings-popover" role="dialog" aria-label="Ajustes de lectura" onClick={(e) => e.stopPropagation()}>
-              <div className="Settings-tabs">
-                <button className={`tab ${activeTab === 'texto' ? 'active' : ''}`} onClick={() => setActiveTab('texto')}>Texto</button>
-                <button className={`tab ${activeTab === 'iluminacion' ? 'active' : ''}`} onClick={() => setActiveTab('iluminacion')}>Iluminación</button>
-              </div>
-
-              <div className="Settings-body">
-                {activeTab === 'texto' && (
-                  <>
-                    <div className="Settings-section">
-                      <div className="section-title">Fuente</div>
-                      <div className="font-options">
-                        <button className={`font-btn ${prefs.font === 'original' ? 'active' : ''}`} onClick={() => handleFontChange('original')}>Original</button>
-                        <button className={`font-btn ${prefs.font === 'sans' ? 'active' : ''}`} onClick={() => handleFontChange('sans')}>Sans</button>
-                        <button className={`font-btn ${prefs.font === 'merri' ? 'active' : ''}`} onClick={() => handleFontChange('merri')}>Merri</button>
-                      </div>
-                    </div>
-
-                    <div className="Settings-section">
-                      <div className="section-title">Tamaño</div>
-                      <div className="range-row">
-                        <input type="range" min="70" max="160" value={prefs.fontSize}
-                          onChange={(e) => handleFontSizeChange(e.target.value)} />
-                        <div className="range-value">{prefs.fontSize}%</div>
-                      </div>
-                    </div>
-
-                    <div className="Settings-section">
-                      <div className="section-title">Interlineado</div>
-                      <div className="range-row">
-                        <input type="range" min="110" max="200" value={Math.round(prefs.lineHeight * 100)}
-                          onChange={(e) => handleLineHeightChange(e.target.value)} />
-                        <div className="range-value">{Math.round(prefs.lineHeight * 100)}%</div>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {activeTab === 'iluminacion' && (
-                  <>
-                    <div className="Settings-section">
-                      <div className="section-title">Brillo para leer</div>
-                      <div className="range-row">
-                        <input type="range" min="50" max="120" value={Math.round(prefs.brightness * 100)}
-                          onChange={(e) => handleBrightnessChange(e.target.value)} />
-                        <div className="range-value">{Math.round(prefs.brightness * 100)}%</div>
-                      </div>
-                    </div>
-
-                    <div className="Settings-section">
-                      <div className="section-title">Tema de visualización</div>
-                      <div className="theme-options">
-                        <button className={`theme-btn ${prefs.theme === 'light' ? 'active' : ''}`} onClick={() => handleThemeChange('light')}> </button>
-                        <button className={`theme-btn ${prefs.theme === 'sepia' ? 'active' : ''}`} onClick={() => handleThemeChange('sepia')}> </button>
-                        <button className={`theme-btn ${prefs.theme === 'dark' ? 'active' : ''}`} onClick={() => handleThemeChange('dark')}> </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-        </header>
-
-        {/* Recording panel: top-centered, always visible */}
-        <div className="Recording-panel" role="region" aria-label="Panel de grabación">
-          <div className="Recording-grid">
-            <button className="RecBtn" onClick={(e) => { e.stopPropagation(); if (isRecording) stopRecording(); else startRecording(); }} title={isRecording ? 'Detener grabación' : 'Iniciar grabación'}>
-              <span className="RecIcon">{isRecording ? '⏹' : '●'}</span>
+          {/* Botón de pausa/reanudar (solo visible durante grabación) */}
+          {isRecording && (
+            <button
+              className={`pause-btn ${isPaused ? 'active' : ''}`}
+              onClick={isPaused ? resumeRecording : pauseRecording}
+              title={isPaused ? 'Reanudar grabación' : 'Pausar grabación'}
+            >
+              {isPaused ? '▶' : '⏸'}
             </button>
-            </div>
+          )}
+
+          {/* Botón de grabación */}
+          <button
+            className={`record-btn ${isRecording ? 'active' : ''} ${isPaused ? 'paused' : ''}`}
+            onClick={isRecording ? stopRecording : startRecording}
+            title={isRecording ? 'Detener grabación' : 'Iniciar grabación'}
+          >
+            {isRecording ? '⏹' : '●'}
+          </button>
+
+          {/* Botón de bloques de lectura */}
+          <button
+            className={`blocks-btn ${isBlockActive ? 'active' : ''}`}
+            onClick={() => setShowBlockModal(true)}
+            title="Iniciar bloques de lectura"
+          >
+            🧩
+          </button>
         </div>
 
-        <main
-          className="Lector-viewer single-page"
-          ref={viewerRef}
-          style={{ 
-            filter: `brightness(${prefs.brightness})`
-          }}
-          onMouseMove={handleMouseMove}
-          onMouseEnter={handleMouseMove}
-          onMouseLeave={() => setShowPageArrows(false)}
-        >
-          {/* inline styles removed: they hid epub.js container in some renderers */}
-          {!ready && <div className="Lector-loading">Cargando libro…</div>}
-          {/* hidden video preview for webcam when recording (kept hidden by default) */}
-          <video ref={videoPreviewRef} autoPlay playsInline muted style={{ display: 'none' }} />
-          {/* epub.js renderiza aquí */}
+        <header className="Lector-header">
+          <div className="Lector-title">📖 {bookTitle}</div>
+          <div className="Lector-controls">
+            <button
+              className="HeaderBtn"
+              onClick={openIndex}
+              title="Índice del libro"
+            >
+              📑
+            </button>
+            <button
+              className="HeaderBtn"
+              onClick={() => setShowSettings(!showSettings)}
+              title="Configuración del lector"
+            >
+              Aa
+            </button>
+            
+            <button
+              className="HeaderBtn close"
+              onClick={onClose}
+              title="Cerrar"
+            >
+              ✕
+            </button>
+            
+            {/* Indicador de estado Gazepoint - al lado del botón cerrar */}
+            <div
+              className={`Gaze-indicator ${gazeConnected ? 'connected' : ''}`}
+              title={gazeConnected ? 'Gazepoint conectado' : 'Gazepoint desconectado'}
+            />
+          </div>
+        </header>
 
-          {/* Flechas laterales para navegación */}
+        {/* Popup de configuración */}
+        {showSettings && (
+          <div className="Settings-popover" onClick={(e) => e.stopPropagation()}>
+            {/* Tabs */}
+            <div className="Settings-tabs">
+              <button
+                className={`Settings-tab-btn ${settingsTab === 'texto' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('texto')}
+              >
+                Texto
+              </button>
+              <button
+                className={`Settings-tab-btn ${settingsTab === 'iluminacion' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('iluminacion')}
+              >
+                Iluminación
+              </button>
+              <button
+                className={`Settings-tab-btn ${settingsTab === 'seguimiento' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('seguimiento')}
+              >
+                Seguimiento
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="Settings-content">
+              {settingsTab === 'texto' && (
+                <>
+                  <div>
+                    <div className="Settings-section-title">FUENTE</div>
+                    <div className="Settings-font-buttons">
+                      {['original', 'sans', 'merri'].map((f) => (
+                        <button
+                          key={f}
+                          className={`Settings-font-btn ${prefs.font === f ? 'active' : ''}`}
+                          onClick={() => updatePref({ font: f })}
+                        >
+                          {f === 'original' ? 'Original' : f === 'sans' ? 'Sans' : 'Serif'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="Settings-section-title">
+                      TAMAÑO: {prefs.fontSize}%
+                    </div>
+                    <input
+                      type="range"
+                      min="70"
+                      max="160"
+                      value={prefs.fontSize}
+                      onChange={(e) => updatePref({ fontSize: Number(e.target.value) })}
+                      className="Settings-range-input"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="Settings-section-title">
+                      ESPACIADO: {Math.round(prefs.lineHeight * 100)}%
+                    </div>
+                    <input
+                      type="range"
+                      min="110"
+                      max="200"
+                      value={Math.round(prefs.lineHeight * 100)}
+                      onChange={(e) => updatePref({ lineHeight: Number(e.target.value) / 100 })}
+                      className="Settings-range-input"
+                    />
+                  </div>
+                </>
+              )}
+
+              {settingsTab === 'iluminacion' && (
+                <>
+                  <div>
+                    <div className="Settings-section-title">
+                      BRILLO: {Math.round(prefs.brightness * 100)}%
+                    </div>
+                    <input
+                      type="range"
+                      min="50"
+                      max="150"
+                      value={Math.round(prefs.brightness * 100)}
+                      onChange={(e) => updatePref({ brightness: Number(e.target.value) / 100 })}
+                      className="Settings-range-input"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="Settings-section-title">TEMA</div>
+                    <div className="Settings-theme-buttons">
+                      <button
+                        className={`Settings-theme-btn ${prefs.theme === 'light' ? 'active' : ''}`}
+                        onClick={() => updatePref({ theme: 'light' })}
+                        title="Claro"
+                        style={{ background: '#ffffff' }}
+                      />
+                      <button
+                        className={`Settings-theme-btn ${prefs.theme === 'sepia' ? 'active' : ''}`}
+                        onClick={() => updatePref({ theme: 'sepia' })}
+                        title="Sepia"
+                        style={{ background: '#f4ecd8' }}
+                      />
+                      <button
+                        className={`Settings-theme-btn ${prefs.theme === 'dark' ? 'active' : ''}`}
+                        onClick={() => updatePref({ theme: 'dark' })}
+                        title="Oscuro"
+                        style={{ background: '#0b0c0c' }}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {settingsTab === 'seguimiento' && (
+                <>
+                  <div>
+                    <div className="Settings-section-title">
+                      RESALTAR PALABRAS AL LEER
+                    </div>
+                    <button
+                      className={`Settings-toggle-btn ${enableGazeHighlight ? 'enabled' : ''}`}
+                      onClick={() => setEnableGazeHighlight(!enableGazeHighlight)}
+                    >
+                      {enableGazeHighlight ? '✓ Habilitado' : 'Deshabilitado'}
+                    </button>
+                    <p className="Settings-description">
+                      Resalta la palabra donde están enfocados tus ojos mientras lees. Requiere Gazepoint conectado.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        <main className="Lector-viewer">
+          <div ref={viewerRef} style={{ width: '100%', height: '100%' }} />
+          
+          {/* Flechas laterales */}
           <div className="NavArrows">
             <button 
-              className={`NavArrow left ${showPageArrows ? 'visible' : ''}`}
+              className={`NavArrow left visible ${isRecording ? 'disabled' : ''}`}
               onClick={(e) => { 
-                e.stopPropagation();
-                e.preventDefault(); 
-                goPrev();
-                handleMouseMove();
+                e.stopPropagation(); 
+                if (!isRecording) goPrev(); 
               }}
-            >◀</button>
-
+              disabled={isRecording}
+              title={isRecording ? 'No disponible durante grabación' : 'Página anterior'}
+            >
+              ◀
+            </button>
             <button
-              className={`NavArrow right ${showPageArrows ? 'visible' : ''}`}
-              onClick={(e) => { 
-                e.stopPropagation();
-                e.preventDefault();
-                goNext();
-                handleMouseMove();
-              }}
-            >▶</button>
+              className="NavArrow right visible"
+              onClick={(e) => { e.stopPropagation(); goNext(); }}
+              title="Página siguiente"
+            >
+              ▶
+            </button>
           </div>
+          
+          {isLoading && <div className="Lector-loading">Cargando libro…</div>}
         </main>
 
         <footer className="Lector-footer">
           <div className="Progress-info">
-            <span>Página {currentPage} de {totalPages} ({typeof progress === 'number' ? progress.toFixed(2) : progress}%)</span>
+            <span>Página {currentPage} de {totalPages} ({progress.toFixed(1)}%)</span>
           </div>
           <input
             type="range"
-            min={1}
+            min="1"
             max={totalPages || 1}
-            value={currentPage || 1}
-            onChange={onPageSliderChange}
-            step={1}
+            value={currentPage}
+            onChange={handleSliderChange}
             className="Lector-slider"
             aria-label="Ir a página"
           />
         </footer>
+
+        {/* Modal de bloques de lectura */}
+        {showBlockModal && (
+          <div className="Block-modal-overlay">
+            <div className="Block-modal">
+              <h2>Bloque de lectura {currentBlock}</h2>
+              <p className="Block-timestamp">{getTimestamp()}</p>
+              <button
+                className="Block-start-btn"
+                onClick={() => {
+                  setShowBlockModal(false);
+                  startBlockTimer();
+                }}
+              >
+                Iniciar Bloque {currentBlock}
+              </button>
+              <button
+                className="Block-cancel-btn"
+                onClick={cancelBlockActivity}
+              >
+                Cancelar Actividad
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Cronómetro de bloques */}
+        {isBlockActive && (
+          <div className={`Block-timer ${blockTimerPosition === 'bottom' ? 'bottom-position' : 'center-position'}`}>
+            <div className="Block-timer-content">
+              <span className="Block-number">Bloque {currentBlock}</span>
+              <span className="Block-time">{formatTime(blockTimer)}</span>
+              <span className="Block-remaining">{formatTime(300 - blockTimer)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Modal del índice del libro */}
+        {showIndexModal && (
+          <div className="Index-modal-overlay" onClick={() => setShowIndexModal(false)}>
+            <div className="Index-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="Index-header">
+                <h3>📑 Índice del Libro</h3>
+                <button 
+                  className="Index-close"
+                  onClick={() => setShowIndexModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              
+              {/* Barra de búsqueda */}
+              {bookIndex.length > 0 && (
+                <div className="Index-search">
+                  <input
+                    type="text"
+                    placeholder="Buscar capítulo..."
+                    value={indexSearch}
+                    onChange={(e) => setIndexSearch(e.target.value)}
+                    className="Index-search-input"
+                  />
+                  {indexSearch && (
+                    <button 
+                      className="Index-search-clear"
+                      onClick={() => setIndexSearch('')}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              )}
+              
+              <div className="Index-content">
+                {bookIndex.length > 0 ? (
+                  <>
+                    {filteredIndex.length > 0 ? (
+                      <ul className="Index-list">
+                        {filteredIndex.map((item) => (
+                          <li 
+                            key={item.id}
+                            className="Index-item"
+                            data-level={item.level || 0}
+                            onClick={() => navigateToChapter(item)}
+                          >
+                            <span className="Index-item-label">{item.label}</span>
+                            {item.page && (
+                              <span className="Index-item-page">Pág. {item.page}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="Index-no-results">
+                        <p>No se encontraron capítulos que coincidan con "{indexSearch}"</p>
+                        <button 
+                          className="Index-clear-search"
+                          onClick={() => setIndexSearch('')}
+                        >
+                          Limpiar búsqueda
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="Index-empty">
+                    <p>No se encontró índice en este libro</p>
+                    <button 
+                      className="Index-goto-start"
+                      onClick={() => {
+                        goToStart();
+                        setShowIndexModal(false);
+                      }}
+                    >
+                      Ir al inicio del libro
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

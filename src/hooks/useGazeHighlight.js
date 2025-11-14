@@ -1,15 +1,34 @@
+/**
+ * useGazeHighlight.js
+ * 
+ * Hook personalizado para resaltar palabras según el seguimiento ocular (eye-tracking)
+ * 
+ * Características:
+ * - Conexión WebSocket al servidor de Gazepoint (ws://localhost:3001)
+ * - Procesamiento de datos de mirada (filtrado y promediado)
+ * - Detección de fijación ocular (varianza < 100 píxeles)
+ * - Resaltado dinámico de palabras en el iframe del libro
+ * 
+ * Parámetros:
+ * - iframeRef: referencia al iframe que contiene el EPUB
+ * - isEnabled: boolean para activar/desactivar el resaltado
+ */
+
 import { useEffect, useRef } from 'react';
 
 export function useGazeHighlight(iframeRef, isEnabled = false) {
   const wsRef = useRef(null);
   const lastFixationRef = useRef(null);
   const fixationTimerRef = useRef(null);
-  const gazeBufferRef = useRef([]);
-  const highlightedSpanRef = useRef(null);
+  const gazeBufferRef = useRef([]); // Buffer circular para suavizar datos de mirada
+  const highlightedSpanRef = useRef(null); // Referencia al span resaltado actual
 
   useEffect(() => {
     if (!isEnabled || !iframeRef?.current) return;
 
+    /**
+     * Conecta al servidor WebSocket de Gazepoint
+     */
     function connect() {
       try {
         const ws = new WebSocket('ws://localhost:3001');
@@ -43,27 +62,42 @@ export function useGazeHighlight(iframeRef, isEnabled = false) {
       }
     }
 
+    /**
+     * Procesa datos de mirada y detecta fijaciones
+     * @param {number} x - Coordenada X de la mirada
+     * @param {number} y - Coordenada Y de la mirada
+     */
     function processGazeData(x, y) {
       gazeBufferRef.current.push({ x, y, time: Date.now() });
       
+      // Mantener solo últimos 500ms de datos
       const now = Date.now();
       gazeBufferRef.current = gazeBufferRef.current.filter(p => now - p.time < 500);
 
+      // Necesitamos al menos 5 puntos para calcular fijación
       if (gazeBufferRef.current.length > 5) {
+        // Calcular promedio de posición
         const avgX = gazeBufferRef.current.reduce((sum, p) => sum + p.x, 0) / gazeBufferRef.current.length;
         const avgY = gazeBufferRef.current.reduce((sum, p) => sum + p.y, 0) / gazeBufferRef.current.length;
         
+        // Calcular varianza (dispersión de la mirada)
         const variance = gazeBufferRef.current.reduce(
           (sum, p) => sum + Math.pow(p.x - avgX, 2) + Math.pow(p.y - avgY, 2),
           0
         ) / gazeBufferRef.current.length;
 
+        // Si varianza < 100, se considera "fijación" (mirada estable)
         if (variance < 100) {
           highlightWordAtCoordinate(avgX, avgY);
         }
       }
     }
 
+    /**
+     * Resalta la palabra en las coordenadas especificadas
+     * @param {number} x - Coordenada X en la pantalla
+     * @param {number} y - Coordenada Y en la pantalla
+     */
     function highlightWordAtCoordinate(x, y) {
       try {
         const iframeDoc = iframeRef.current.contentDocument || iframeRef.current.contentWindow.document;

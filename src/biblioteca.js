@@ -1,3 +1,14 @@
+/**
+ * BIBLIOTECA - Componente principal que muestra la colección de libros
+ * 
+ * Características:
+ * - Carga libros desde el servidor (paginados de 6 en 6)
+ * - Extrae portadas y títulos de archivos EPUB
+ * - Navegación entre páginas con animaciones de nubes
+ * - Navegación circular (al llegar al final vuelve al inicio)
+ * - Abre el lector cuando se selecciona un libro
+ */
+
 import React, { useState, useEffect } from 'react';
 import './biblioteca.css';
 import ePub from 'epubjs';
@@ -7,19 +18,24 @@ import nubeSoplonaIzq from './assets/nubesoplonaizq.png';
 import nubeSoplonaDer from './assets/nubesoplonader.png';
 import flechaIzq from './assets/flechaizq.png';
 import flechaDer from './assets/flechader.png';
-import LectorSimple from './LectorSimple';
+import Lector from './Lector';
 
 function Biblioteca() {
-  const [libros, setLibros] = useState([]);
-  const [portadas, setPortadas] = useState([]);
-  const [nubeActiva, setNubeActiva] = useState(null);
-  const [deslizarDireccion, setDeslizarDireccion] = useState(null);
-  const [paginaActual, setPaginaActual] = useState(0);
-  const [libroSeleccionado, setLibroSeleccionado] = useState(null);
-  const [cargandoPortadas, setCargandoPortadas] = useState(false);
-  const [paginationInfo, setPaginationInfo] = useState(null);
-  const librosPorPagina = 6;
+  // ============ ESTADOS ============
+  const [libros, setLibros] = useState([]); // Lista de libros actuales
+  const [portadas, setPortadas] = useState([]); // Portadas extraídas de los EPUBs
+  const [nubeActiva, setNubeActiva] = useState(null); // Para animación hover
+  const [deslizarDireccion, setDeslizarDireccion] = useState(null); // Para animación de transición
+  const [paginaActual, setPaginaActual] = useState(0); // Página actual de libros
+  const [libroSeleccionado, setLibroSeleccionado] = useState(null); // Libro abierto en el lector
+  const [cargandoPortadas, setCargandoPortadas] = useState(false); // Estado de carga
+  const [paginationInfo, setPaginationInfo] = useState(null); // Info de paginación del servidor
+  const librosPorPagina = 6; // Constante: 6 libros por página
 
+  /**
+   * Carga los libros de una página específica desde el servidor
+   * Extrae las portadas y títulos de cada archivo EPUB
+   */
   useEffect(() => {
     const cargarPagina = async (pageNumber) => {
       console.log(`Cargando página ${pageNumber}...`);
@@ -82,18 +98,29 @@ function Biblioteca() {
     cargarPagina(paginaActual);
   }, [paginaActual, librosPorPagina]);
 
+  // ============ FUNCIONES DE NAVEGACIÓN ============
+  
+  /**
+   * Activa la animación de la nube que "sopla" los libros
+   * @param {string} direccion - 'izquierda' o 'derecha', indica hacia dónde sopla la nube
+   */
   const activarAnimacion = (direccion) => {
     setNubeActiva(direccion);
     setTimeout(() => {
       setNubeActiva(null);
       setDeslizarDireccion(null);
-    }, 1200);
+    }, 1200); // 1.2 segundos de animación
   };
 
+  /**
+   * Avanza a la siguiente página de libros
+   * Si llega al final, vuelve al principio (navegación circular)
+   */
   const avanzarPagina = () => {
     console.log('avanzarPagina llamada:', { paginationInfo, paginaActual });
     if (paginationInfo) {
       if (paginationInfo.hasNextPage) {
+        // Hay más páginas: avanzar
         console.log('Avanzando a página siguiente...');
         setDeslizarDireccion('derecha');
         activarAnimacion('izquierda'); // Nube soplando hacia la izquierda
@@ -101,10 +128,10 @@ function Biblioteca() {
           setPaginaActual(prev => prev + 1);
         }, 1200);
       } else {
-        // Navegación circular: ir al principio
+        // Final alcanzado: volver al principio (navegación circular)
         console.log('Final alcanzado, volviendo al principio...');
         setDeslizarDireccion('derecha');
-        activarAnimacion('izquierda'); // Nube soplando hacia la izquierda
+        activarAnimacion('izquierda');
         setTimeout(() => {
           setPaginaActual(0);
         }, 1200);
@@ -112,10 +139,15 @@ function Biblioteca() {
     }
   };
 
+  /**
+   * Retrocede a la página anterior de libros
+   * Si está al principio, va al final (navegación circular)
+   */
   const retrocederPagina = () => {
     console.log('retrocederPagina llamada:', { paginationInfo, paginaActual });
     if (paginationInfo) {
       if (paginationInfo.hasPrevPage) {
+        // Hay páginas anteriores: retroceder
         console.log('Retrocediendo a página anterior...');
         setDeslizarDireccion('izquierda');
         activarAnimacion('derecha'); // Nube soplando hacia la derecha
@@ -123,10 +155,10 @@ function Biblioteca() {
           setPaginaActual(prev => prev - 1);
         }, 1200);
       } else {
-        // Navegación circular: ir al final
+        // Principio alcanzado: ir al final (navegación circular)
         console.log('Principio alcanzado, yendo al final...');
         setDeslizarDireccion('izquierda');
-        activarAnimacion('derecha'); // Nube soplando hacia la derecha
+        activarAnimacion('derecha');
         setTimeout(() => {
           setPaginaActual(paginationInfo.totalPages - 1);
         }, 1200);
@@ -230,7 +262,7 @@ function Biblioteca() {
 
       {/* agregado: Lector modal */}
       {libroSeleccionado && (
-        <LectorSimple archivo={libroSeleccionado} onClose={() => setLibroSeleccionado(null)} />
+        <Lector archivo={libroSeleccionado} onClose={() => setLibroSeleccionado(null)} />
       )}
     </div>
   );
