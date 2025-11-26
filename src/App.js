@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 
 import solAnimado from './assets/sol.png';
@@ -8,38 +8,127 @@ import Biblioteca from './biblioteca';
 function App() {
   const [usuario, setUsuario] = useState('');
   const [contrasena, setContrasena] = useState('');
-  const [modoDev, setModoDev] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState(false);
   const [mensajeBoton, setMensajeBoton] = useState('Iniciar sesión');
   const [loginExitoso, setLoginExitoso] = useState(false);
   const [animarSalida, setAnimarSalida] = useState(false);
+  const [userData, setUserData] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(true);
 
-  const iniciarSesion = () => {
+  // Verificar si hay una sesión activa al cargar
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      // Verificar que la sesión sea válida
+      fetch('http://localhost:3000/api/user', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.id) {
+            setUserData(data);
+            setLoginExitoso(true);
+          } else {
+            localStorage.removeItem('authToken');
+            setCheckingSession(false);
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem('authToken');
+          setCheckingSession(false);
+        });
+    } else {
+      // Si no hay token, intentar login automático con admin/123
+      autoLogin();
+    }
+  }, []);
+
+  // Login automático con credenciales por defecto
+  const autoLogin = async () => {
+    try {
+      const response = await fetch('http://localhost:3000/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username: 'admin', password: '123' })
+      });
+
+      const data = await response.json();
+      
+      if (response.ok && data.token) {
+        localStorage.setItem('authToken', data.token);
+        setUserData(data.user);
+        setLoginExitoso(true);
+      } else {
+        setCheckingSession(false);
+      }
+    } catch (error) {
+      console.error('Error en auto-login:', error);
+      setCheckingSession(false);
+    }
+  };
+
+  const iniciarSesion = async () => {
     setCargando(true);
     setError(false);
     setMensajeBoton('');
 
-    setTimeout(() => {
+    try {
+      const response = await fetch('http://localhost:3000/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username: usuario, password: contrasena })
+      });
+
+      const data = await response.json();
+      
       setCargando(false);
-      if (usuario === 'usuario' && contrasena === '123') {
+      
+      if (response.ok && data.token) {
+        // Guardar token y datos de usuario
+        localStorage.setItem('authToken', data.token);
+        setUserData(data.user);
+        
         setAnimarSalida(true);
         setTimeout(() => {
           setLoginExitoso(true);
         }, 1500); // espera a que termine la animación
       } else {
         setError(true);
-        setMensajeBoton('usuario/contraseña no válido');
+        setMensajeBoton(data.error || 'usuario/contraseña no válido');
         setTimeout(() => {
           setError(false);
           setMensajeBoton('Iniciar sesión');
         }, 2000);
       }
-    }, 1500);
+    } catch (error) {
+      console.error('Error en login:', error);
+      setCargando(false);
+      setError(true);
+      setMensajeBoton('Error de conexión');
+      setTimeout(() => {
+        setError(false);
+        setMensajeBoton('Iniciar sesión');
+      }, 2000);
+    }
   };
 
+  if (checkingSession) {
+    return (
+      <div className="App">
+        <div className="loader" />
+      </div>
+    );
+  }
+
   if (loginExitoso) {
-    return <Biblioteca />;
+    return <Biblioteca userData={userData} />;
   }
 
   return (
@@ -65,15 +154,6 @@ function App() {
           value={contrasena}
           onChange={(e) => setContrasena(e.target.value)}
         />
-
-        <label className="Checkbox">
-          <input
-            type="checkbox"
-            checked={modoDev}
-            onChange={() => setModoDev(!modoDev)}
-          />
-          MODO DESARROLLADOR
-        </label>
 
         <button
           className={`Boton-login ${error ? 'Boton-error' : ''}`}

@@ -20,10 +20,17 @@ import flechaIzq from './assets/flechaizq.png';
 import flechaDer from './assets/flechader.png';
 import Lector from './Lector';
 
-function Biblioteca() {
+function Biblioteca({ userData }) {
   // ============ ESTADOS ============
   const [libros, setLibros] = useState([]); // Lista de libros actuales
   const [portadas, setPortadas] = useState([]); // Portadas extraídas de los EPUBs
+  
+  // Estado para popover de desarrollador
+  const [showDevPopover, setShowDevPopover] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [userForm, setUserForm] = useState({ id: null, username: '', password: '', isDeveloper: false });
+  const [editMode, setEditMode] = useState(false);
+  const [userError, setUserError] = useState('');
   const [nubeActiva, setNubeActiva] = useState(null); // Para animación hover
   const [deslizarDireccion, setDeslizarDireccion] = useState(null); // Para animación de transición
   const [paginaActual, setPaginaActual] = useState(0); // Página actual de libros
@@ -31,6 +38,99 @@ function Biblioteca() {
   const [cargandoPortadas, setCargandoPortadas] = useState(false); // Estado de carga
   const [paginationInfo, setPaginationInfo] = useState(null); // Info de paginación del servidor
   const librosPorPagina = 6; // Constante: 6 libros por página
+
+  // ============ HANDLERS DE USUARIO (SOLO DESARROLLADOR) ============
+  
+  // Cargar usuarios cuando se abre el popover
+  useEffect(() => {
+    if (showDevPopover && userData?.isDeveloper) {
+      fetch('http://localhost:3000/api/users', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      })
+        .then(res => res.json())
+        .then(setUsers)
+        .catch(() => setUsers([]));
+    }
+  }, [showDevPopover, userData]);
+
+  // Handlers para el formulario de usuario
+  const handleUserFormChange = e => {
+    const { name, value, type, checked } = e.target;
+    setUserForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
+  };
+
+  const handleUserSave = async () => {
+    setUserError('');
+    if (!userForm.username || (!editMode && !userForm.password)) {
+      setUserError('Usuario y contraseña requeridos');
+      return;
+    }
+    try {
+      const res = await fetch('http://localhost:3000/api/users' + (editMode ? `/${userForm.id}` : ''), {
+        method: editMode ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
+        body: JSON.stringify({
+          username: userForm.username,
+          password: userForm.password,
+          // En edición, enviar isDeveloper; en creación, no enviarlo (será false por defecto)
+          ...(editMode && { isDeveloper: userForm.isDeveloper }),
+          preferences: userForm.preferences
+        })
+      });
+      if (!res.ok) throw new Error('Error al guardar usuario');
+      setShowDevPopover(false);
+      setUserForm({ id: null, username: '', password: '', isDeveloper: false });
+      setEditMode(false);
+    } catch (e) {
+      setUserError('No se pudo guardar el usuario');
+    }
+  };
+
+  const handleUserEdit = u => {
+    setUserForm({
+      id: u.id,
+      username: u.username,
+      password: '',
+      isDeveloper: !!u.isDeveloper,
+      preferences: u.preferences
+    });
+    setEditMode(true);
+  };
+
+  const handleUserDelete = async id => {
+    if (!window.confirm('¿Eliminar usuario?')) return;
+    await fetch(`http://localhost:3000/api/users/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+    });
+    setUsers(users => users.filter(u => u.id !== id));
+  };
+
+  // ============ HANDLERS GENERALES ============
+  
+  /**
+   * Cierra sesión y redirige al login
+   */
+  const handleLogout = async () => {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        try {
+          await fetch('http://localhost:3000/api/logout', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+        } catch (error) {
+          console.error('Error al cerrar sesión:', error);
+        }
+      }
+      localStorage.removeItem('authToken');
+      window.location.reload();
+    };
 
   /**
    * Carga los libros de una página específica desde el servidor
@@ -59,7 +159,9 @@ function Biblioteca() {
           (data.books || []).map(async (libro) => {
             try {
               console.log('Cargando libro:', libro.archivo);
-              const epub = ePub(libro.archivo);
+              // Construir URL válida para el libro
+              const bookUrl = libro.archivo.startsWith('http') ? libro.archivo : `http://localhost:3000${libro.archivo}`;
+              const epub = ePub(bookUrl);
               await epub.ready;
 
               let tituloReal = libro.titulo;
@@ -122,8 +224,8 @@ function Biblioteca() {
       if (paginationInfo.hasNextPage) {
         // Hay más páginas: avanzar
         console.log('Avanzando a página siguiente...');
-        setDeslizarDireccion('derecha');
-        activarAnimacion('izquierda'); // Nube soplando hacia la izquierda
+        setDeslizarDireccion('derecha'); // Libros se desplazan hacia la izquierda (avance visual a la derecha)
+        activarAnimacion('derecha'); // Nube derecha sopla hacia la izquierda
         setTimeout(() => {
           setPaginaActual(prev => prev + 1);
         }, 1200);
@@ -131,7 +233,7 @@ function Biblioteca() {
         // Final alcanzado: volver al principio (navegación circular)
         console.log('Final alcanzado, volviendo al principio...');
         setDeslizarDireccion('derecha');
-        activarAnimacion('izquierda');
+        activarAnimacion('derecha');
         setTimeout(() => {
           setPaginaActual(0);
         }, 1200);
@@ -149,8 +251,8 @@ function Biblioteca() {
       if (paginationInfo.hasPrevPage) {
         // Hay páginas anteriores: retroceder
         console.log('Retrocediendo a página anterior...');
-        setDeslizarDireccion('izquierda');
-        activarAnimacion('derecha'); // Nube soplando hacia la derecha
+        setDeslizarDireccion('izquierda'); // Libros se desplazan hacia la derecha (retroceso visual a la izquierda)
+        activarAnimacion('izquierda'); // Nube izquierda sopla hacia la derecha
         setTimeout(() => {
           setPaginaActual(prev => prev - 1);
         }, 1200);
@@ -158,7 +260,7 @@ function Biblioteca() {
         // Principio alcanzado: ir al final (navegación circular)
         console.log('Principio alcanzado, yendo al final...');
         setDeslizarDireccion('izquierda');
-        activarAnimacion('derecha');
+        activarAnimacion('izquierda');
         setTimeout(() => {
           setPaginaActual(paginationInfo.totalPages - 1);
         }, 1200);
@@ -176,6 +278,85 @@ function Biblioteca() {
 
   return (
     <div className="Biblioteca fade-in">
+
+        {/* Botón de logout y opciones de desarrollador */}
+        <div className="Top-buttons">
+          <button 
+            className="Logout-button" 
+            onClick={handleLogout}
+            title="Cerrar sesión"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
+          {userData?.isDeveloper && (
+            <button
+              className="DevOptions-button"
+              title="Opciones de desarrollador"
+              onClick={() => setShowDevPopover(v => !v)}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4l3 3" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Popover de opciones de desarrollador */}
+        {userData?.isDeveloper && showDevPopover && (
+          <div className="DevPopover">
+            <div className="DevPopover-title">Gestión de usuarios</div>
+            <div className="DevPopover-list">
+              {users.map(u => (
+                <div key={u.id} className="DevPopover-user">
+                  <span>{u.username}</span>
+                  <span className="DevPopover-role">{u.isDeveloper ? '👨‍💻 Dev' : 'Usuario'}</span>
+                  <button className="DevPopover-edit" onClick={() => handleUserEdit(u)} title="Editar">✏️</button>
+                  <button className="DevPopover-delete" onClick={() => handleUserDelete(u.id)} title="Eliminar">🗑️</button>
+                </div>
+              ))}
+            </div>
+            <hr />
+            <div className="DevPopover-form">
+              <input
+                name="username"
+                placeholder="Usuario"
+                value={userForm.username}
+                onChange={handleUserFormChange}
+                autoComplete="off"
+              />
+              <input
+                name="password"
+                type="password"
+                placeholder={editMode ? "Nueva contraseña (opcional)" : "Contraseña"}
+                value={userForm.password}
+                onChange={handleUserFormChange}
+                autoComplete="new-password"
+              />
+              {editMode && (
+                <label style={{marginTop: 8, display: 'flex', alignItems: 'center', gap: 8}}>
+                  <input
+                    type="checkbox"
+                    name="isDeveloper"
+                    checked={userForm.isDeveloper}
+                    onChange={handleUserFormChange}
+                  />
+                  <span>Es desarrollador</span>
+                </label>
+              )}
+              {userError && <div className="DevPopover-error">{userError}</div>}
+              <div className="DevPopover-actions">
+                <button onClick={handleUserSave}>{editMode ? 'Guardar cambios' : 'Crear usuario'}</button>
+                {editMode && <button onClick={() => { setEditMode(false); setUserForm({ id: null, username: '', password: '', isDeveloper: false }); }}>Cancelar</button>}
+              </div>
+            </div>
+          </div>
+        )}
+
       <div className="Titulo-biblioteca-container">
         <h2 className="Titulo-biblioteca">
           <span className="Titulo-nube">☁️</span>
@@ -262,7 +443,11 @@ function Biblioteca() {
 
       {/* agregado: Lector modal */}
       {libroSeleccionado && (
-        <Lector archivo={libroSeleccionado} onClose={() => setLibroSeleccionado(null)} />
+          <Lector 
+           archivo={libroSeleccionado} 
+           onClose={() => setLibroSeleccionado(null)} 
+           userData={userData}
+          />
       )}
     </div>
   );

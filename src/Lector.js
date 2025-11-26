@@ -148,7 +148,9 @@ export default function Lector(props) {
 
     const init = async () => {
       try {
-        const book = ePub(archivo);
+        // Construir URL válida para el libro
+        const bookUrl = archivo.startsWith('http') ? archivo : `http://localhost:3000${archivo}`;
+        const book = ePub(bookUrl);
         bookRef.current = book;
         await book.ready;
         if (!mounted) return;
@@ -205,7 +207,7 @@ export default function Lector(props) {
         const rendition = book.renderTo(viewerRef.current, {
           width: '100%',
           height: '100%',
-          flow: 'paginated',
+          flow: 'scrolled-doc',
           spread: 'none' // Una sola columna
         });
         renditionRef.current = rendition;

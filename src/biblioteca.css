@@ -1,3 +1,121 @@
+.DevPopover-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+}
+.DevPopover-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid #f7e7b7;
+  font-size: 1rem;
+}
+.DevPopover-role {
+  font-size: 0.9em;
+  color: #b8860b;
+  margin-left: 0.5em;
+}
+.DevPopover-edit, .DevPopover-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1em;
+  margin-left: 0.2em;
+  color: #b8860b;
+  transition: color 0.2s;
+}
+.DevPopover-edit:hover { color: #4BA5E8; }
+.DevPopover-delete:hover { color: #e74c3c; }
+.DevPopover-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.DevPopover-form input[type="text"],
+.DevPopover-form input[type="password"] {
+  padding: 0.5em;
+  border: 1px solid #FFD966;
+  border-radius: 6px;
+  font-size: 1em;
+}
+.DevPopover-form label {
+  font-size: 0.95em;
+  color: #444;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+.DevPopover-actions {
+  display: flex;
+  gap: 0.5em;
+  margin-top: 0.5em;
+}
+.DevPopover-actions button {
+  background: #FFD966;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5em 1.2em;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.DevPopover-actions button:hover {
+  background: #FFC300;
+}
+.DevPopover-error {
+  color: #e74c3c;
+  font-size: 0.95em;
+  margin-top: 0.2em;
+}
+.Top-buttons {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  gap: 0.5rem;
+  z-index: 1001;
+}
+
+.DevOptions-button {
+  background: rgba(255,255,255,0.9);
+  border: 2px solid #FFD966;
+  border-radius: 12px;
+  padding: 0.7rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.DevOptions-button:hover {
+  background: #FFFBEA;
+  border-color: #FFC300;
+}
+.DevOptions-button svg {
+  color: #B8860B;
+}
+
+.DevPopover {
+  position: fixed;
+  top: 4.5rem;
+  right: 1.5rem;
+  background: #fff;
+  border: 2px solid #FFD966;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  padding: 1.5rem 1.2rem 1.2rem 1.2rem;
+  min-width: 320px;
+  z-index: 1100;
+}
+.DevPopover-title {
+  font-weight: bold;
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+  color: #B8860B;
+}
 /* ============ IMPORTAR FUENTES INFANTILES ============ */
 @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600&family=Bubblegum+Sans&family=Comic+Neue:wght@300;400;700&display=swap');
 
@@ -89,6 +207,39 @@ html, body {
   animation: cloudSeaFloat 30s ease-in-out infinite;
   z-index: 0;
   pointer-events: none;
+}
+
+/* Botón de logout */
+.Logout-button {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid #91CFFF;
+  border-radius: 12px;
+  padding: 0.7rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.Logout-button:hover {
+  background: rgba(145, 207, 255, 0.2);
+  border-color: #4BA5E8;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.Logout-button svg {
+  color: #2b6a66;
+}
+
+.Logout-button:active {
+  transform: translateY(0);
 }
 
 @keyframes cloudSeaFloat {

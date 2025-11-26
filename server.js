@@ -1,3 +1,5 @@
+// ...existing code...
+// (Mover los endpoints de administración de usuarios al final del archivo, después de la inicialización de app)
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -7,6 +9,8 @@ const WebSocket = require('ws');
 const net = require('net');
 const http = require('http');
 const { exec } = require('child_process');
+const db = require('./db/init-db');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,6 +23,143 @@ app.use((req, res, next) => {
 
 app.use(cors());
 app.use(express.json());
+
+// ============ SESIONES DE USUARIO (en memoria) ============
+const activeSessions = new Map(); // sessionToken -> { userId, username, isDeveloper }
+
+// Middleware para verificar sesión
+function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+  
+  const token = authHeader.substring(7);
+  const session = activeSessions.get(token);
+  
+  if (!session) {
+    return res.status(401).json({ error: 'Sesión inválida' });
+  }
+  
+  req.user = session;
+  next();
+}
+
+// ============ ENDPOINTS DE AUTENTICACIÓN ============
+
+// Login
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
+  }
+  
+  db.get(
+    'SELECT id, username, password, isDeveloper, preferences FROM users WHERE username = ?',
+    [username],
+    async (err, user) => {
+      if (err) {
+        console.error('Error en login:', err);
+        return res.status(500).json({ error: 'Error del servidor' });
+      }
+      
+      if (!user) {
+        return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+      }
+      
+      // Comparar contraseña con bcrypt
+      try {
+        const ok = await bcrypt.compare(password, user.password);
+        if (!ok) {
+          return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+        }
+      } catch (e) {
+        console.error('Error comparando bcrypt:', e);
+        return res.status(500).json({ error: 'Error del servidor' });
+      }
+
+      // Crear token de sesión
+      const token = require('crypto').randomBytes(32).toString('hex');
+      activeSessions.set(token, {
+        userId: user.id,
+        username: user.username,
+        isDeveloper: user.isDeveloper === 1
+      });
+      
+      let preferences = { fontSize: 100, theme: 'light', font: 'original', lineHeight: '1.6' };
+      try {
+        preferences = JSON.parse(user.preferences);
+      } catch (e) {
+        console.error('Error parseando preferencias:', e);
+      }
+      
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          isDeveloper: user.isDeveloper === 1,
+          preferences
+        }
+      });
+    }
+  );
+});
+
+// Logout
+app.post('/api/logout', requireAuth, (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader.substring(7);
+  activeSessions.delete(token);
+  res.json({ message: 'Sesión cerrada' });
+});
+
+// Obtener usuario actual
+app.get('/api/user', requireAuth, (req, res) => {
+  db.get(
+    'SELECT id, username, isDeveloper, preferences FROM users WHERE id = ?',
+    [req.user.userId],
+    (err, user) => {
+      if (err || !user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+      
+      let preferences = { fontSize: 100, theme: 'light', font: 'original', lineHeight: '1.6' };
+      try {
+        preferences = JSON.parse(user.preferences);
+      } catch (e) {}
+      
+      res.json({
+        id: user.id,
+        username: user.username,
+        isDeveloper: user.isDeveloper === 1,
+        preferences
+      });
+    }
+  );
+});
+
+// Actualizar preferencias del usuario
+app.put('/api/user/preferences', requireAuth, (req, res) => {
+  const { preferences } = req.body;
+  
+  if (!preferences) {
+    return res.status(400).json({ error: 'Preferencias requeridas' });
+  }
+  
+  db.run(
+    'UPDATE users SET preferences = ? WHERE id = ?',
+    [JSON.stringify(preferences), req.user.userId],
+    (err) => {
+      if (err) {
+        console.error('Error actualizando preferencias:', err);
+        return res.status(500).json({ error: 'Error al guardar preferencias' });
+      }
+      res.json({ message: 'Preferencias actualizadas', preferences });
+    }
+  );
+});
 
 // Configuración de directorios
 const recordingsDir = path.join(__dirname, 'camera-recorder-app', 'server', 'recordings');
