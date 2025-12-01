@@ -31,6 +31,7 @@ export default function Lector(props) {
   const blockTimerRef = useRef(null);
   const blockStartTime = useRef(null);
   const pageCalcRef = useRef({ locationsPerPage: 1, totalLocs: 0, totalPages: 0 });
+  const progressLoadedRef = useRef(false); // Bandera para cargar progreso solo una vez
   const saveProgressTimeoutRef = useRef(null); // Para debounce del guardado
   
   // ============ ESTADOS DEL LIBRO ============
@@ -384,10 +385,13 @@ export default function Lector(props) {
         // Ocultar spinner de carga
         setIsLoading(false);
         
-        // Cargar progreso guardado
-        setTimeout(() => {
-          loadReadingProgress();
-        }, 500);
+        // Cargar progreso guardado solo una vez
+        if (!progressLoadedRef.current) {
+          progressLoadedRef.current = true;
+          setTimeout(() => {
+            loadReadingProgress();
+          }, 500);
+        }
 
         // -------- EVENTOS DE RENDITION --------
         // relocated: se dispara al cambiar de página
@@ -462,7 +466,7 @@ export default function Lector(props) {
         if (bookRef.current) bookRef.current.destroy();
       } catch (_) {}
     };
-  }, [archivo, applyPrefsToBook, loadReadingProgress, saveReadingProgress]);
+  }, [archivo, applyPrefsToBook]);
 
   // Aplicar estilos cuando cambien las preferencias
   useEffect(() => {

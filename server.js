@@ -413,6 +413,16 @@ wss.on('connection', (ws) => {
   console.log('Cliente web conectado al WS');
   // NO conectar automáticamente a Gazepoint, solo cuando se necesite
 
+  // Manejar errores de WebSocket
+  ws.on('error', (err) => {
+    // Ignorar errores de conexión normal (ECONNRESET, etc)
+    if (err.code === 'ECONNRESET' || err.code === 'EPIPE') {
+      // Estos errores son normales cuando el cliente se desconecta abruptamente
+      return;
+    }
+    console.error('Error en WebSocket:', err.message);
+  });
+
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
