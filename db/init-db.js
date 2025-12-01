@@ -27,14 +27,32 @@ db.serialize(() => {
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       isDeveloper INTEGER DEFAULT 0,
-      preferences TEXT DEFAULT '{"fontSize": 100, "theme": "light", "font": "original", "lineHeight": "1.6"}',
+      preferences TEXT DEFAULT '{"fontSize": 100, "theme": "light", "font": "original", "lineHeight": 1.6, "brightness": 1}',
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `, (err) => {
     if (err) {
       console.error('❌ Error al crear tabla users:', err.message);
     }
-    // Silenciar mensaje de verificación exitoso y quitar creación automática de admin
+  });
+
+  // Crear tabla de progreso de lectura
+  db.run(`
+    CREATE TABLE IF NOT EXISTS reading_progress (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL,
+      bookFile TEXT NOT NULL,
+      currentPage INTEGER DEFAULT 1,
+      totalPages INTEGER DEFAULT 1,
+      progress REAL DEFAULT 0,
+      lastReadAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES users(id),
+      UNIQUE(userId, bookFile)
+    )
+  `, (err) => {
+    if (err) {
+      console.error('❌ Error al crear tabla reading_progress:', err.message);
+    }
   });
 });
 

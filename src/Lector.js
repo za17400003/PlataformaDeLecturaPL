@@ -31,6 +31,7 @@ export default function Lector(props) {
   const blockTimerRef = useRef(null);
   const blockStartTime = useRef(null);
   const pageCalcRef = useRef({ locationsPerPage: 1, totalLocs: 0, totalPages: 0 });
+  const saveProgressTimeoutRef = useRef(null); // Para debounce del guardado
   
   // ============ ESTADOS DEL LIBRO ============
   const [ready, setReady] = useState(false);
@@ -71,6 +72,122 @@ export default function Lector(props) {
   // ============ HOOKS PERSONALIZADOS ============
   const { startRecording: startGaze, stopRecording: stopGaze, isConnected: gazeConnected } = useGazepoint();
   useGazeHighlight(viewerRef, enableGazeHighlight && gazeConnected);
+
+  // ============ FUNCIÓN PARA GUARDAR PROGRESO ============
+  const saveReadingProgress = React.useCallback(async (retryCount = 0) => {
+    const token = localStorage.getItem('authToken');
+    if (!token || !archivo) return;
+
+    try {
+      const progressData = {
+        bookFile: archivo,
+        currentPage,
+        totalPages,
+        progress
+      };
+
+      const response = await fetch('/api/reading-progress', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(progressData)
+      });
+
+      if (response.ok) {
+        console.log('[lector] Progreso guardado:', { currentPage, totalPages });
+        // Guardar en localStorage como backup
+        localStorage.setItem(`progress_${archivo}`, JSON.stringify(progressData));
+      } else if (response.status === 401) {
+        console.warn('[lector] Sesión expirada al guardar progreso');
+        // Guardar en localStorage como backup
+        localStorage.setItem(`progress_${archivo}`, JSON.stringify(progressData));
+      } else if (retryCount < 2) {
+        // Reintentar hasta 2 veces si falla
+        console.warn('[lector] Error guardando progreso, reintentando...');
+        setTimeout(() => saveReadingProgress(retryCount + 1), 1000 * (retryCount + 1));
+      } else {
+        console.error('[lector] Error guardando progreso después de reintentos');
+        // Guardar en localStorage como backup
+        localStorage.setItem(`progress_${archivo}`, JSON.stringify(progressData));
+      }
+    } catch (err) {
+      console.error('[lector] Error en saveReadingProgress:', err);
+      // Guardar en localStorage como backup
+      if (archivo) {
+        localStorage.setItem(`progress_${archivo}`, JSON.stringify({
+          bookFile: archivo,
+          currentPage,
+          totalPages,
+          progress
+        }));
+      }
+    }
+  }, [archivo, currentPage, totalPages, progress]);
+
+  // ============ FUNCIÓN PARA CARGAR PROGRESO ============
+  const loadReadingProgress = React.useCallback(async () => {
+    const token = localStorage.getItem('authToken');
+    if (!token || !archivo || !bookRef.current) return;
+
+    try {
+      const encodedFile = encodeURIComponent(archivo);
+      const response = await fetch(`/api/reading-progress/${encodedFile}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.currentPage > 1 && renditionRef.current && bookRef.current?.locations.length()) {
+          // Ir a la página guardada
+          const percentage = (data.currentPage - 1) / (data.totalPages || 1);
+          try {
+            const targetCfi = bookRef.current.locations.cfiFromPercentage(percentage);
+            if (targetCfi) {
+              await renditionRef.current.display(targetCfi);
+              console.log('[lector] Progreso cargado del servidor:', data.currentPage, '/', data.totalPages);
+              return; // Éxito
+            }
+          } catch (err) {
+            console.error('[lector] Error al navegar al progreso guardado:', err);
+          }
+        }
+      } else if (response.status === 404) {
+        console.log('[lector] No hay progreso guardado para este libro');
+      } else if (response.status === 401) {
+        console.warn('[lector] Sesión expirada al cargar progreso');
+      } else {
+        console.error('[lector] Error cargando progreso del servidor');
+      }
+    } catch (err) {
+      console.error('[lector] Error en loadReadingProgress:', err);
+    }
+
+    // Intentar cargar desde localStorage como fallback
+    try {
+      const localProgress = localStorage.getItem(`progress_${archivo}`);
+      if (localProgress && renditionRef.current && bookRef.current?.locations.length()) {
+        const data = JSON.parse(localProgress);
+        if (data.currentPage > 1) {
+          const percentage = (data.currentPage - 1) / (data.totalPages || 1);
+          try {
+            const targetCfi = bookRef.current.locations.cfiFromPercentage(percentage);
+            if (targetCfi) {
+              await renditionRef.current.display(targetCfi);
+              console.log('[lector] Progreso cargado del localStorage:', data.currentPage, '/', data.totalPages);
+            }
+          } catch (err) {
+            console.error('[lector] Error navegando con progreso del localStorage:', err);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[lector] Error cargando progreso del localStorage:', err);
+    }
+  }, [archivo]);
 
   // ============ FUNCIONES DE APLICACIÓN DE ESTILOS ============
   
@@ -266,6 +383,11 @@ export default function Lector(props) {
         
         // Ocultar spinner de carga
         setIsLoading(false);
+        
+        // Cargar progreso guardado
+        setTimeout(() => {
+          loadReadingProgress();
+        }, 500);
 
         // -------- EVENTOS DE RENDITION --------
         // relocated: se dispara al cambiar de página
@@ -289,6 +411,21 @@ export default function Lector(props) {
             
             setCurrentPage(pageNum);
             console.log('[lector] Página:', pageNum, '/', totalPagesCalc, '- Porcentaje:', (pct * 100).toFixed(1), '%');
+            
+            // Guardar progreso con debounce para evitar saturar el servidor
+            // Limpia timeout anterior si existe
+            if (saveProgressTimeoutRef.current) {
+              clearTimeout(saveProgressTimeoutRef.current);
+            }
+            
+            // Guardar inmediatamente (sin esperar debounce) y luego nuevamente después del debounce
+            saveReadingProgress();
+            
+            // Debounce: guardar de nuevo después de 2 segundos si no hay más cambios
+            saveProgressTimeoutRef.current = setTimeout(() => {
+              saveReadingProgress();
+              saveProgressTimeoutRef.current = null;
+            }, 2000);
           } catch (e) {
             console.error('[lector] Error calculando página:', e);
           }
@@ -315,12 +452,17 @@ export default function Lector(props) {
     init();
     return () => {
       mounted = false;
+      // Limpiar timeout de guardado de progreso
+      if (saveProgressTimeoutRef.current) {
+        clearTimeout(saveProgressTimeoutRef.current);
+        saveProgressTimeoutRef.current = null;
+      }
       try {
         if (renditionRef.current) renditionRef.current.destroy();
         if (bookRef.current) bookRef.current.destroy();
       } catch (_) {}
     };
-  }, [archivo, applyPrefsToBook]);
+  }, [archivo, applyPrefsToBook, loadReadingProgress, saveReadingProgress]);
 
   // Aplicar estilos cuando cambien las preferencias
   useEffect(() => {

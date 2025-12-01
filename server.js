@@ -25,7 +25,15 @@ app.use(cors());
 app.use(express.json());
 
 // ============ SESIONES DE USUARIO (en memoria) ============
-const activeSessions = new Map(); // sessionToken -> { userId, username, isDeveloper }
+const activeSessions = new Map(); // sessionToken -> { userId, username, isDeveloper, expiresAt }
+
+// Función para obtener hora de medianoche
+function getMidnightTime() {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0); // Próxima medianoche
+  return midnight;
+}
 
 // Middleware para verificar sesión
 function requireAuth(req, res, next) {
@@ -39,6 +47,12 @@ function requireAuth(req, res, next) {
   
   if (!session) {
     return res.status(401).json({ error: 'Sesión inválida' });
+  }
+  
+  // Verificar si la sesión expiró (medianoche)
+  if (new Date() > session.expiresAt) {
+    activeSessions.delete(token);
+    return res.status(401).json({ error: 'Sesión expirada' });
   }
   
   req.user = session;
@@ -81,10 +95,12 @@ app.post('/api/login', (req, res) => {
 
       // Crear token de sesión
       const token = require('crypto').randomBytes(32).toString('hex');
+      const expiresAt = getMidnightTime();
       activeSessions.set(token, {
         userId: user.id,
         username: user.username,
-        isDeveloper: user.isDeveloper === 1
+        isDeveloper: user.isDeveloper === 1,
+        expiresAt
       });
       
       let preferences = { fontSize: 100, theme: 'light', font: 'original', lineHeight: '1.6' };
@@ -157,6 +173,71 @@ app.put('/api/user/preferences', requireAuth, (req, res) => {
         return res.status(500).json({ error: 'Error al guardar preferencias' });
       }
       res.json({ message: 'Preferencias actualizadas', preferences });
+    }
+  );
+});
+
+// Guardar progreso de lectura
+app.post('/api/reading-progress', requireAuth, (req, res) => {
+  const { bookFile, currentPage, totalPages, progress } = req.body;
+  
+  if (!bookFile || currentPage === undefined || totalPages === undefined) {
+    return res.status(400).json({ error: 'Datos incompletos' });
+  }
+  
+  db.run(
+    `INSERT INTO reading_progress (userId, bookFile, currentPage, totalPages, progress, lastReadAt)
+     VALUES (?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(userId, bookFile) DO UPDATE SET 
+       currentPage = ?,
+       totalPages = ?,
+       progress = ?,
+       lastReadAt = datetime('now')`,
+    [req.user.userId, bookFile, currentPage, totalPages, progress, currentPage, totalPages, progress],
+    (err) => {
+      if (err) {
+        console.error('Error guardando progreso:', err);
+        return res.status(500).json({ error: 'Error al guardar progreso' });
+      }
+      res.json({ message: 'Progreso guardado' });
+    }
+  );
+});
+
+// Obtener progreso de lectura de un libro
+app.get('/api/reading-progress/:bookFile', requireAuth, (req, res) => {
+  const bookFile = decodeURIComponent(req.params.bookFile);
+  
+  db.get(
+    'SELECT currentPage, totalPages, progress, lastReadAt FROM reading_progress WHERE userId = ? AND bookFile = ?',
+    [req.user.userId, bookFile],
+    (err, row) => {
+      if (err) {
+        console.error('Error obteniendo progreso:', err);
+        return res.status(500).json({ error: 'Error al obtener progreso' });
+      }
+      
+      if (!row) {
+        return res.json({ currentPage: 1, totalPages: 0, progress: 0 });
+      }
+      
+      res.json(row);
+    }
+  );
+});
+
+// Obtener todos los progresos del usuario
+app.get('/api/reading-progress', requireAuth, (req, res) => {
+  db.all(
+    'SELECT bookFile, currentPage, totalPages, progress, lastReadAt FROM reading_progress WHERE userId = ?',
+    [req.user.userId],
+    (err, rows) => {
+      if (err) {
+        console.error('Error obteniendo progresos:', err);
+        return res.status(500).json({ error: 'Error al obtener progresos' });
+      }
+      
+      res.json(rows || []);
     }
   );
 });
