@@ -224,7 +224,7 @@ function Biblioteca({ userData }) {
       if (paginationInfo.hasNextPage) {
         // Hay más páginas: avanzar
         console.log('Avanzando a página siguiente...');
-        setDeslizarDireccion('derecha'); // Libros se desplazan hacia la izquierda (avance visual a la derecha)
+        setDeslizarDireccion('izquierda'); // Libros se desplazan hacia la izquierda
         activarAnimacion('derecha'); // Nube derecha sopla hacia la izquierda
         setTimeout(() => {
           setPaginaActual(prev => prev + 1);
@@ -232,7 +232,7 @@ function Biblioteca({ userData }) {
       } else {
         // Final alcanzado: volver al principio (navegación circular)
         console.log('Final alcanzado, volviendo al principio...');
-        setDeslizarDireccion('derecha');
+        setDeslizarDireccion('izquierda');
         activarAnimacion('derecha');
         setTimeout(() => {
           setPaginaActual(0);
@@ -251,7 +251,7 @@ function Biblioteca({ userData }) {
       if (paginationInfo.hasPrevPage) {
         // Hay páginas anteriores: retroceder
         console.log('Retrocediendo a página anterior...');
-        setDeslizarDireccion('izquierda'); // Libros se desplazan hacia la derecha (retroceso visual a la izquierda)
+        setDeslizarDireccion('derecha'); // Libros se desplazan hacia la derecha
         activarAnimacion('izquierda'); // Nube izquierda sopla hacia la derecha
         setTimeout(() => {
           setPaginaActual(prev => prev - 1);
@@ -259,7 +259,7 @@ function Biblioteca({ userData }) {
       } else {
         // Principio alcanzado: ir al final (navegación circular)
         console.log('Principio alcanzado, yendo al final...');
-        setDeslizarDireccion('izquierda');
+        setDeslizarDireccion('derecha');
         activarAnimacion('izquierda');
         setTimeout(() => {
           setPaginaActual(paginationInfo.totalPages - 1);

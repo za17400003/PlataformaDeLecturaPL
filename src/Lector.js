@@ -30,6 +30,7 @@ export default function Lector(props) {
   const chunksRef = useRef([]);
   const blockTimerRef = useRef(null);
   const blockStartTime = useRef(null);
+  const pageCalcRef = useRef({ locationsPerPage: 1, totalLocs: 0, totalPages: 0 });
   
   // ============ ESTADOS DEL LIBRO ============
   const [ready, setReady] = useState(false);
@@ -105,7 +106,8 @@ export default function Lector(props) {
     
     try {
       // Inyectar CSS directamente en el iframe
-      setTimeout(() => {
+      // Usar requestAnimationFrame para aplicar inmediatamente
+      requestAnimationFrame(() => {
         const iframes = document.querySelectorAll('iframe');
         iframes.forEach(iframe => {
           try {
@@ -131,7 +133,7 @@ export default function Lector(props) {
             console.log('[lector] No se pudo acceder al iframe:', e);
           }
         });
-      }, 100);
+      });
     } catch (e) {
       console.log('[lector] Error aplicando estilos:', e);
     }
@@ -204,11 +206,13 @@ export default function Lector(props) {
         }
 
         // -------- RENDERIZAR LIBRO --------
+        // Modo paginado horizontal: cada página se muestra completa sin scroll
+        // Similar a Google Play Books en landscape
         const rendition = book.renderTo(viewerRef.current, {
           width: '100%',
           height: '100%',
-          flow: 'scrolled-doc',
-          spread: 'none' // Una sola columna
+          flow: 'paginated',
+          spread: 'none'        // Una sola columna por página
         });
         renditionRef.current = rendition;
 
@@ -219,8 +223,21 @@ export default function Lector(props) {
           await book.locations.generate(256); // 256 caracteres por "location"
           console.log('[lector] Locations generadas:', book.locations.length());
         }
-        const total = book.locations.length();
-        setTotalPages(total);
+        
+        // Para modo paginated, calcular total de páginas de forma diferente
+        // No usar locations directamente, sino calcular basado en spine items y caracteres
+        const totalLocs = book.locations.length();
+        
+        // Alternativa más precisa: dividir locations en "pantallas"
+        // Cada pantalla debería ser aproximadamente 30 locations (ajustable)
+        const locationsPerPage = Math.max(1, Math.floor(totalLocs / 100));
+        const totalPagesCalc = Math.max(1, Math.ceil(totalLocs / locationsPerPage));
+        
+        // Guardar en ref para usar en relocated event
+        pageCalcRef.current = { locationsPerPage, totalLocs, totalPages: totalPagesCalc };
+        
+        setTotalPages(totalPagesCalc);
+        console.log('[lector] Total de páginas calculado:', totalPagesCalc, '(locations:', totalLocs, ', per page:', locationsPerPage, ')');
 
         // -------- CALCULAR NÚMEROS DE PÁGINA DEL ÍNDICE --------
         // Ahora que tenemos locations, asignamos número de página a cada capítulo
@@ -232,7 +249,7 @@ export default function Lector(props) {
                 if (item.href) {
                   const cfi = book.canonical(item.href); // CFI = Canonical Fragment Identifier
                   const percentage = book.locations.percentageFromCfi(cfi);
-                  pageNumber = Math.floor(percentage * total) + 1;
+                  pageNumber = Math.floor(percentage * totalPagesCalc) + 1;
                 }
               } catch (e) {
                 console.log('[lector] No se pudo calcular página para:', item.label);
@@ -252,13 +269,30 @@ export default function Lector(props) {
 
         // -------- EVENTOS DE RENDITION --------
         // relocated: se dispara al cambiar de página
+        // Calcula página usando locations normalizadas a "páginas visibles"
         rendition.on('relocated', (loc) => {
-          const cfi = loc.start?.cfi || loc.cfi;
-          if (cfi && book.locations.length()) {
-            const pct = book.locations.percentageFromCfi(cfi) * 100;
-            setProgress(pct);
-            setCurrentPage(Math.max(1, Math.floor((pct / 100) * total)));
+          if (!loc || !book.locations.length()) return;
+          
+          try {
+            const cfi = loc.start?.cfi || loc.cfi;
+            if (!cfi) return;
+            
+            // Obtener porcentaje del libro
+            const pct = book.locations.percentageFromCfi(cfi);
+            setProgress(pct * 100);
+            
+            // Calcular página usando los parámetros guardados
+            const { locationsPerPage, totalPages: totalPagesCalc } = pageCalcRef.current;
+            
+            // Página = (porcentaje * total de páginas)
+            const pageNum = Math.max(1, Math.ceil(pct * totalPagesCalc));
+            
+            setCurrentPage(pageNum);
+            console.log('[lector] Página:', pageNum, '/', totalPagesCalc, '- Porcentaje:', (pct * 100).toFixed(1), '%');
+          } catch (e) {
+            console.error('[lector] Error calculando página:', e);
           }
+          
           // Aplicar estilos cuando la página cambia
           setTimeout(() => applyPrefsToBook(), 100);
         });
@@ -475,16 +509,21 @@ export default function Lector(props) {
   
   /**
    * Navega a una página específica usando el slider
+   * En Google Play Books style, cada página es una location
    * @param {Event} e - Evento del input range
    */
   const handleSliderChange = (e) => {
-    const page = parseInt(e.target.value, 10);
+    const pageNum = parseInt(e.target.value, 10);
     const book = bookRef.current;
     const rendition = renditionRef.current;
     if (book && rendition && book.locations.length()) {
-      const pct = (page - 1) / totalPages; // Convertir página a porcentaje
-      const cfi = book.locations.cfiFromPercentage(pct); // Obtener CFI de esa posición
-      rendition.display(cfi).catch(() => {});
+      // Calcular porcentaje basado en el número de página
+      const { totalPages: totalPagesCalc } = pageCalcRef.current;
+      const percentage = (pageNum - 1) / Math.max(1, totalPagesCalc - 1);
+      const cfi = book.locations.cfiFromPercentage(percentage);
+      if (cfi) {
+        rendition.display(cfi).catch(() => {});
+      }
     }
   };
 
