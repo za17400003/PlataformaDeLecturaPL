@@ -20,7 +20,7 @@ import flechaIzq from './assets/flechaizq.png';
 import flechaDer from './assets/flechader.png';
 import Lector from './Lector';
 
-function Biblioteca({ userData }) {
+function Biblioteca({ userData, onLogout }) {
   // ============ ESTADOS ============
   const [libros, setLibros] = useState([]); // Lista de libros actuales
   const [portadas, setPortadas] = useState([]); // Portadas extraídas de los EPUBs
@@ -115,22 +115,25 @@ function Biblioteca({ userData }) {
    * Cierra sesión y redirige al login
    */
   const handleLogout = async () => {
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        try {
-          await fetch('http://localhost:3000/api/logout', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-        } catch (error) {
-          console.error('Error al cerrar sesión:', error);
-        }
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      try {
+        await fetch('http://localhost:3000/api/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      } catch (error) {
+        console.error('Error al cerrar sesión:', error);
       }
-      localStorage.removeItem('authToken');
-      window.location.reload();
-    };
+    }
+    localStorage.removeItem('authToken');
+    // Llamar al callback de logout del padre (App.js)
+    if (onLogout) {
+      onLogout();
+    }
+  };
 
   /**
    * Carga los libros de una página específica desde el servidor

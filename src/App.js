@@ -13,6 +13,7 @@ function App() {
   const [mensajeBoton, setMensajeBoton] = useState('Iniciar sesión');
   const [loginExitoso, setLoginExitoso] = useState(false);
   const [animarSalida, setAnimarSalida] = useState(false);
+  const [animarEntrada, setAnimarEntrada] = useState(false);
   const [userData, setUserData] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
 
@@ -128,15 +129,50 @@ function App() {
   }
 
   if (loginExitoso) {
-    return <Biblioteca userData={userData} />;
+    const handleLogout = () => {
+      // Iniciar animación de logout en App (animarEntrada)
+      setAnimarEntrada(true);
+      setTimeout(() => {
+        // Después de la animación, cambiar de pantalla
+        setLoginExitoso(false);
+        setCheckingSession(false);
+        setUsuario('');
+        setContrasena('');
+        setMensajeBoton('Iniciar sesión'); // Restaurar texto del botón
+        setAnimarSalida(false);
+        setAnimarEntrada(false);
+        localStorage.removeItem('authToken');
+      }, 1500);
+    };
+    
+    // Si animarEntrada está activo, mostrar App en lugar de Biblioteca
+    if (animarEntrada) {
+      return (
+        <div className={`App ${animarEntrada ? 'fade-in' : ''}`}>
+          <img
+            src={solAnimado}
+            alt="Sol animado"
+            className={`app-sol-animado ${animarEntrada ? 'sol-entrada' : ''}`}
+          />
+          <div className="Login-container" />
+          <img
+            src={pajaritos}
+            alt="Pajaritos en rama"
+            className={`Imagen-pajaros ${animarEntrada ? 'pajaros-entrada' : ''}`}
+          />
+        </div>
+      );
+    }
+    
+    return <Biblioteca userData={userData} onLogout={handleLogout} />;
   }
 
   return (
-    <div className={`App ${animarSalida ? 'fade-out' : ''}`}>
+    <div className={`App ${animarSalida ? 'fade-out' : ''} ${!loginExitoso && animarEntrada ? 'fade-in' : ''}`}>
       <img
         src={solAnimado}
         alt="Sol animado"
-        className={`app-sol-animado ${animarSalida ? 'sol-salida' : ''}`}
+        className={`app-sol-animado ${animarSalida ? 'sol-salida' : ''} ${animarEntrada ? 'sol-entrada' : ''}`}
       />
 
       <div className="Login-container">
@@ -167,7 +203,7 @@ function App() {
       <img
         src={pajaritos}
         alt="Pajaritos en rama"
-        className={`Imagen-pajaros ${animarSalida ? 'pajaros-salida' : ''}`}
+        className={`Imagen-pajaros ${animarSalida ? 'pajaros-salida' : ''} ${animarEntrada ? 'pajaros-entrada' : ''}`}
       />
     </div>
   );

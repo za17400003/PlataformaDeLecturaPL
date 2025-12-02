@@ -164,3 +164,49 @@ html, body {
     transform: scale(0.95);
   }
 }
+
+/* Animaciones de entrada (inverso de salida) */
+.fade-in {
+  animation: fadeIn 1.5s forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.sol-entrada {
+  animation: sol-entrada 1.5s forwards;
+}
+
+@keyframes sol-entrada {
+  from {
+    transform: translateX(-100vw);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.pajaros-entrada {
+  animation: pajaros-entrada 1.5s forwards;
+}
+
+@keyframes pajaros-entrada {
+  from {
+    transform: translateX(100vw);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
