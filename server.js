@@ -242,6 +242,67 @@ app.get('/api/reading-progress', requireAuth, (req, res) => {
   );
 });
 
+// ============ ENDPOINTS DE PREFERENCIAS DE USUARIO ============
+
+// Obtener preferencias del usuario
+app.get('/api/user-preferences', requireAuth, (req, res) => {
+  db.get(
+    'SELECT preferences FROM users WHERE id = ?',
+    [req.user.userId],
+    (err, row) => {
+      if (err) {
+        console.error('Error obteniendo preferencias:', err);
+        return res.status(500).json({ error: 'Error al obtener preferencias' });
+      }
+      
+      if (!row || !row.preferences) {
+        return res.json({
+          fontSize: 100,
+          lineHeight: 1.45,
+          theme: 'light',
+          font: 'original',
+          brightness: 1.0
+        });
+      }
+      
+      try {
+        res.json(JSON.parse(row.preferences));
+      } catch (e) {
+        res.json({
+          fontSize: 100,
+          lineHeight: 1.45,
+          theme: 'light',
+          font: 'original',
+          brightness: 1.0
+        });
+      }
+    }
+  );
+});
+
+// Guardar preferencias del usuario
+app.post('/api/user-preferences', requireAuth, (req, res) => {
+  const prefs = req.body;
+  
+  if (!prefs) {
+    return res.status(400).json({ error: 'Preferencias requeridas' });
+  }
+  
+  const prefsJson = JSON.stringify(prefs);
+  
+  db.run(
+    'UPDATE users SET preferences = ? WHERE id = ?',
+    [prefsJson, req.user.userId],
+    function(err) {
+      if (err) {
+        console.error('Error guardando preferencias:', err);
+        return res.status(500).json({ error: 'Error al guardar preferencias' });
+      }
+      res.json({ message: 'Preferencias guardadas' });
+    }
+  );
+});
+
 // Configuración de directorios
 const recordingsDir = path.join(__dirname, 'camera-recorder-app', 'server', 'recordings');
 const librosPath = path.join(__dirname, 'public', 'libros');

@@ -450,6 +450,7 @@ function Biblioteca({ userData, onLogout }) {
            archivo={libroSeleccionado} 
            onClose={() => setLibroSeleccionado(null)} 
            userData={userData}
+           initialPreferences={userData?.preferences}
           />
       )}
     </div>

@@ -19,7 +19,7 @@ import { useGazepoint } from './hooks/useGazepoint';
 import { useGazeHighlight } from './hooks/useGazeHighlight';
 
 export default function Lector(props) {
-  const { archivo, onClose } = props;
+  const { archivo, onClose, initialPreferences } = props;
   
   // ============ REFERENCIAS ============
   const viewerRef = useRef(null);
@@ -33,7 +33,6 @@ export default function Lector(props) {
   const pageCalcRef = useRef({ locationsPerPage: 1, totalLocs: 0, totalPages: 0 });
   const progressLoadedRef = useRef(false); // Bandera para cargar progreso solo una vez
   const saveProgressTimeoutRef = useRef(null); // Para debounce del guardado
-  const applyingPrefsRef = useRef(false); // Flag para evitar guardar progreso al cambiar preferencias
   
   // ============ ESTADOS DEL LIBRO ============
   const [ready, setReady] = useState(false);
@@ -63,13 +62,15 @@ export default function Lector(props) {
   const [blockTimerPosition, setBlockTimerPosition] = useState('center');
   
   // ============ PREFERENCIAS DE LECTURA ============
-  const [prefs, setPrefs] = useState({
-    fontSize: 100,
-    lineHeight: 1.45,
-    theme: 'light',
-    font: 'original',
-    brightness: 1.0
-  });
+  const [prefs, setPrefs] = useState(
+    initialPreferences || {
+      fontSize: 100,
+      lineHeight: 1.45,
+      theme: 'light',
+      font: 'original',
+      brightness: 1.0
+    }
+  );
 
   // ============ HOOKS PERSONALIZADOS ============
   const { startRecording: startGaze, stopRecording: stopGaze, isConnected: gazeConnected } = useGazepoint();
@@ -196,7 +197,6 @@ export default function Lector(props) {
   /**
    * Aplica las preferencias de usuario al libro (fuente, tema, tamaño, etc.)
    * Se ejecuta cada vez que cambian las preferencias o se navega a una nueva página
-   * NOTA: Usa textContent directamente sin remover/recrear para evitar disparar 'relocated'
    */
   const applyPrefsToBook = React.useCallback(() => {
     const rendition = renditionRef.current;
@@ -225,17 +225,13 @@ export default function Lector(props) {
     `;
     
     try {
-      // Marcar que estamos aplicando preferencias
-      applyingPrefsRef.current = true;
-      
-      // Inyectar CSS directamente en el iframe
-      // Usar requestAnimationFrame para aplicar inmediatamente
+      // Inyectar CSS directamente en el iframe sin remover/recrear para evitar disparar relocated
       requestAnimationFrame(() => {
         const iframes = document.querySelectorAll('iframe');
         iframes.forEach(iframe => {
           try {
             const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-            if (iframeDoc && iframeDoc.body) {
+            if (iframeDoc && iframeDoc.head) {
               let styleEl = iframeDoc.getElementById('epub-user-prefs');
               
               // Si no existe el style tag, crearlo
@@ -245,8 +241,7 @@ export default function Lector(props) {
                 iframeDoc.head.appendChild(styleEl);
               }
               
-              // Solo actualizar el contenido del CSS (sin remover/recrear el elemento)
-              // Esto es CRUCIAL para no disparar relocated
+              // Solo actualizar el contenido del CSS
               if (styleEl.textContent !== css) {
                 styleEl.textContent = css;
               }
@@ -261,15 +256,43 @@ export default function Lector(props) {
             console.log('[lector] No se pudo acceder al iframe:', e);
           }
         });
-        
-        // Desmarcar que terminamos de aplicar preferencias
-        applyingPrefsRef.current = false;
       });
     } catch (e) {
       console.log('[lector] Error aplicando estilos:', e);
-      applyingPrefsRef.current = false;
     }
   }, [prefs]);
+
+  // Cargar preferencias del usuario al montar el componente (solo si no vinieron en props)
+  useEffect(() => {
+    if (initialPreferences) {
+      // Ya tenemos las preferencias desde props
+      console.log('[lector] Usando preferencias de props:', initialPreferences);
+      return;
+    }
+    
+    const loadUserPreferences = async () => {
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+      
+      try {
+        const response = await fetch('/api/user-preferences', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const userPrefs = await response.json();
+          setPrefs(userPrefs);
+          console.log('[lector] Preferencias cargadas del servidor:', userPrefs);
+        }
+      } catch (err) {
+        console.error('[lector] Error cargando preferencias:', err);
+      }
+    };
+    
+    loadUserPreferences();
+  }, [initialPreferences]);
 
   // Inicializar libro
   useEffect(() => {
@@ -411,12 +434,6 @@ export default function Lector(props) {
         // relocated: se dispara al cambiar de página
         // Calcula página usando locations normalizadas a "páginas visibles"
         rendition.on('relocated', (loc) => {
-          // Si estamos aplicando preferencias, ignorar este evento
-          if (applyingPrefsRef.current) {
-            console.log('[lector] Ignorando relocated porque estamos aplicando preferencias');
-            return;
-          }
-          
           if (!loc || !book.locations.length()) return;
           
           try {
@@ -697,9 +714,28 @@ export default function Lector(props) {
     }
   };
 
-  const updatePref = (newPref) => {
-    setPrefs(prev => ({ ...prev, ...newPref }));
-  };
+  const updatePref = React.useCallback((newPref) => {
+    setPrefs(prev => {
+      const updated = { ...prev, ...newPref };
+      
+      // Guardar preferencias en el servidor
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        fetch('/api/user-preferences', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(updated)
+        }).catch(err => {
+          console.error('[lector] Error guardando preferencias:', err);
+        });
+      }
+      
+      return updated;
+    });
+  }, []);
 
   // ============ SISTEMA DE BLOQUES DE LECTURA ============
   // El usuario puede configurar bloques de 5 minutos para organizar su lectura
