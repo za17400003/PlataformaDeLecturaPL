@@ -33,6 +33,7 @@ export default function Lector(props) {
   const pageCalcRef = useRef({ locationsPerPage: 1, totalLocs: 0, totalPages: 0 });
   const progressLoadedRef = useRef(false); // Bandera para cargar progreso solo una vez
   const saveProgressTimeoutRef = useRef(null); // Para debounce del guardado
+  const applyingPrefsRef = useRef(false); // Flag para evitar guardar progreso al cambiar preferencias
   
   // ============ ESTADOS DEL LIBRO ============
   const [ready, setReady] = useState(false);
@@ -195,6 +196,7 @@ export default function Lector(props) {
   /**
    * Aplica las preferencias de usuario al libro (fuente, tema, tamaño, etc.)
    * Se ejecuta cada vez que cambian las preferencias o se navega a una nueva página
+   * NOTA: Usa textContent directamente sin remover/recrear para evitar disparar 'relocated'
    */
   const applyPrefsToBook = React.useCallback(() => {
     const rendition = renditionRef.current;
@@ -223,6 +225,9 @@ export default function Lector(props) {
     `;
     
     try {
+      // Marcar que estamos aplicando preferencias
+      applyingPrefsRef.current = true;
+      
       // Inyectar CSS directamente en el iframe
       // Usar requestAnimationFrame para aplicar inmediatamente
       requestAnimationFrame(() => {
@@ -231,15 +236,20 @@ export default function Lector(props) {
           try {
             const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
             if (iframeDoc && iframeDoc.body) {
-              // Remover style anterior si existe
-              const oldStyle = iframeDoc.getElementById('epub-user-prefs');
-              if (oldStyle) oldStyle.remove();
+              let styleEl = iframeDoc.getElementById('epub-user-prefs');
               
-              // Crear nuevo style
-              const style = iframeDoc.createElement('style');
-              style.id = 'epub-user-prefs';
-              style.textContent = css;
-              iframeDoc.head.appendChild(style);
+              // Si no existe el style tag, crearlo
+              if (!styleEl) {
+                styleEl = iframeDoc.createElement('style');
+                styleEl.id = 'epub-user-prefs';
+                iframeDoc.head.appendChild(styleEl);
+              }
+              
+              // Solo actualizar el contenido del CSS (sin remover/recrear el elemento)
+              // Esto es CRUCIAL para no disparar relocated
+              if (styleEl.textContent !== css) {
+                styleEl.textContent = css;
+              }
               
               // Asegurar visibilidad del contenido
               if (iframeDoc.body) {
@@ -251,9 +261,13 @@ export default function Lector(props) {
             console.log('[lector] No se pudo acceder al iframe:', e);
           }
         });
+        
+        // Desmarcar que terminamos de aplicar preferencias
+        applyingPrefsRef.current = false;
       });
     } catch (e) {
       console.log('[lector] Error aplicando estilos:', e);
+      applyingPrefsRef.current = false;
     }
   }, [prefs]);
 
@@ -397,6 +411,12 @@ export default function Lector(props) {
         // relocated: se dispara al cambiar de página
         // Calcula página usando locations normalizadas a "páginas visibles"
         rendition.on('relocated', (loc) => {
+          // Si estamos aplicando preferencias, ignorar este evento
+          if (applyingPrefsRef.current) {
+            console.log('[lector] Ignorando relocated porque estamos aplicando preferencias');
+            return;
+          }
+          
           if (!loc || !book.locations.length()) return;
           
           try {
@@ -469,11 +489,15 @@ export default function Lector(props) {
   }, [archivo, applyPrefsToBook]);
 
   // Aplicar estilos cuando cambien las preferencias
+  // NO incluir applyPrefsToBook en las dependencias para evitar loops infinitos
   useEffect(() => {
-    if (ready) {
-      applyPrefsToBook();
+    if (ready && renditionRef.current) {
+      // Usar requestAnimationFrame para aplicar estilos sin disparar relocated
+      requestAnimationFrame(() => {
+        applyPrefsToBook();
+      });
     }
-  }, [prefs, applyPrefsToBook, ready]);
+  }, [prefs, ready]);
 
   // Si Gazepoint se desconecta durante grabación, detener
   useEffect(() => {
