@@ -103,7 +103,7 @@ app.post('/api/login', (req, res) => {
         expiresAt
       });
       
-      let preferences = { fontSize: 100, theme: 'light', font: 'original', lineHeight: '1.6' };
+      let preferences = { fontSize: 100, theme: 'light', font: 'original', lineHeight: 1.45, brightness: 1.0 };
       try {
         preferences = JSON.parse(user.preferences);
       } catch (e) {

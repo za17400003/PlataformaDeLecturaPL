@@ -27,7 +27,7 @@ db.serialize(() => {
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       isDeveloper INTEGER DEFAULT 0,
-      preferences TEXT DEFAULT '{"fontSize": 100, "theme": "light", "font": "original", "lineHeight": 1.6, "brightness": 1}',
+      preferences TEXT DEFAULT '{"fontSize": 100, "theme": "light", "font": "original", "lineHeight": 1.45, "brightness": 1.0}',
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `, (err) => {
