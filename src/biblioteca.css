@@ -78,6 +78,40 @@
   z-index: 1001;
 }
 
+/* Mensaje de bienvenida */
+.Welcome-message {
+  position: fixed;
+  top: 1.5rem;
+  left: 1.5rem;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 0.75rem 1.2rem;
+  border-radius: 12px;
+  border: 2px solid #aef3ef;
+  box-shadow: 0 4px 12px rgba(0, 166, 157, 0.15);
+  font-family: 'Comic Neue', cursive;
+  font-size: 1rem;
+  color: #00a69d;
+  z-index: 1001;
+  animation: slideInLeft 0.5s ease-out;
+}
+
+.Welcome-message strong {
+  color: #d946ef;
+  font-weight: 700;
+  margin-left: 0.3rem;
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 .DevOptions-button {
   background: rgba(255,255,255,0.9);
   border: 2px solid #FFD966;
@@ -344,8 +378,16 @@ html, body {
   width: 100%;
   max-width: 100%;
   position: relative;
-  margin: 0 auto 2rem auto; /* Reducir margen inferior */
+  margin: 3rem auto 2rem auto; /* Aumentado top margin para dejar espacio al welcome */
   padding: 0 1rem 1rem 1rem; /* Padding adaptativo */
+}
+
+/* Espaciador entre grids superior e inferior */
+.Grid-separator {
+  width: 100%;
+  height: 2.5rem; /* Separación vertical generosa */
+  position: relative;
+  z-index: 1;
 }
 
 /* Grilla de libros: más cerca del título */
@@ -668,6 +710,8 @@ html, body {
 .Libro-nube:has(.Titulo-libro.titulo-papalote) {
   max-width: 360px; /* Aumentar max-width para papalotes sin cortes */
   overflow: visible; /* Permitir que el fondo se vea sin cortes */
+  margin-top: 3rem !important; /* Bajar los papalotes más para mejor contraste */
+  padding-bottom: 3rem; /* Más espacio para el título */
 }
 
 .Libro-nube:has(.Titulo-libro.titulo-papalote) .Nube-blanca {

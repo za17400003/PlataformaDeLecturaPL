@@ -336,6 +336,11 @@ function Biblioteca({ userData, onLogout }) {
   return (
     <div className="Biblioteca fade-in">
 
+        {/* Mensaje de bienvenida */}
+        <div className="Welcome-message">
+          <span>Bienvenido, <strong>{userData?.username || 'Usuario'}</strong></span>
+        </div>
+
         {/* Botón de logout y opciones de desarrollador */}
         <div className="Top-buttons">
           <button 
@@ -488,6 +493,9 @@ function Biblioteca({ userData, onLogout }) {
             );
           })}
         </div>
+
+        {/* Espaciador entre grids para mejor separación visual */}
+        <div className="Grid-separator" />
 
         <div className="Flechas-navegacion">
           <img
