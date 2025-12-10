@@ -18,6 +18,12 @@ import nubeSoplonaIzq from './assets/nubesoplonaizq.png';
 import nubeSoplonaDer from './assets/nubesoplonader.png';
 import flechaIzq from './assets/flechaizq.png';
 import flechaDer from './assets/flechader.png';
+import papalote1 from './assets/papalote1.png';
+import papalote2 from './assets/papalote2.png';
+import papalote3 from './assets/papalote3.png';
+import papalote4 from './assets/papalote4.png';
+import papalote5 from './assets/papalote5.png';
+import papalote6 from './assets/papalote6.png';
 import Lector from './Lector';
 
 function Biblioteca({ userData, onLogout }) {
@@ -37,7 +43,9 @@ function Biblioteca({ userData, onLogout }) {
   const [libroSeleccionado, setLibroSeleccionado] = useState(null); // Libro abierto en el lector
   const [cargandoPortadas, setCargandoPortadas] = useState(false); // Estado de carga
   const [paginationInfo, setPaginationInfo] = useState(null); // Info de paginación del servidor
+  const [papalotesAleatorios, setpapalotesAleatorios] = useState([]); // 3 papalotes aleatorios para grid inferior
   const librosPorPagina = 6; // Constante: 6 libros por página
+  const papalotesDisponibles = [papalote1, papalote2, papalote3, papalote4, papalote5, papalote6];
 
   // ============ HANDLERS DE USUARIO (SOLO DESARROLLADOR) ============
   
@@ -110,6 +118,20 @@ function Biblioteca({ userData, onLogout }) {
   };
 
   // ============ HANDLERS GENERALES ============
+  
+  /**
+   * Genera 3 papalotes aleatorios diferentes
+   */
+  const generarPapalotesAleatorios = () => {
+    const indices = Array.from({ length: 6 }, (_, i) => i); // [0, 1, 2, 3, 4, 5]
+    const seleccionados = [];
+    for (let i = 0; i < 3; i++) {
+      const randomIdx = Math.floor(Math.random() * indices.length);
+      seleccionados.push(papalotesDisponibles[indices[randomIdx]]);
+      indices.splice(randomIdx, 1); // Remover para no repetir
+    }
+    setpapalotesAleatorios(seleccionados);
+  };
   
   /**
    * Cierra sesión y redirige al login
@@ -191,6 +213,7 @@ function Biblioteca({ userData, onLogout }) {
         );
         
         setPortadas(resultados);
+        generarPapalotesAleatorios(); // Generar nuevos papalotes cuando se cargan libros
       } catch (err) {
         console.error('Error al cargar página:', err);
         setLibros([]);
@@ -401,6 +424,12 @@ function Biblioteca({ userData, onLogout }) {
           {!cargandoPortadas && portadas.length > 0 && portadas.map((libro, index) => {
             const duration = 4 + (index % 3);
             const delay = (index % 3) * 0.15;
+            const esGridInferior = index >= 3; // Últimos 3 elementos (índices 3, 4, 5)
+            const papaloteIndex = index - 3; // 0, 1, 2 para los 3 inferiores
+            const backgroundImage = esGridInferior && papalotesAleatorios[papaloteIndex]
+              ? `url(${papalotesAleatorios[papaloteIndex]})`
+              : `url(${nubeBlanca})`;
+            
             return (
               <div
                 key={index}
@@ -410,7 +439,7 @@ function Biblioteca({ userData, onLogout }) {
               >
                 <div
                   className="Nube-blanca"
-                  style={{ backgroundImage: `url(${nubeBlanca})` }}
+                  style={{ backgroundImage }}
                 >
                   {libro.portada ? (
                     <img
@@ -422,7 +451,7 @@ function Biblioteca({ userData, onLogout }) {
                     <div className="Error-libro">Sin portada</div>
                   )}
                 </div>
-                <h3 className="Titulo-libro">{libro.titulo}</h3>
+                <h3 className={`Titulo-libro ${esGridInferior ? 'titulo-papalote' : ''}`}>{libro.titulo}</h3>
               </div>
             );
           })}

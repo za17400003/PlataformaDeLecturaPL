@@ -1,5 +1,3 @@
-// ...existing code...
-// (Mover los endpoints de administración de usuarios al final del archivo, después de la inicialización de app)
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -11,9 +9,26 @@ const http = require('http');
 const { exec } = require('child_process');
 const db = require('./db/init-db');
 const bcrypt = require('bcryptjs');
+const config = require('./config');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = config.PORT;
+
+// ============ UTILIDADES DE ERROR ============
+/**
+ * Respuesta estandarizada de error
+ * NO expone detalles internos en producción
+ * @param {number} statusCode - Código HTTP
+ * @param {string} message - Mensaje público para el cliente
+ * @param {Error} error - Error interno (para logging)
+ * @returns {Object} Respuesta estandarizada
+ */
+function createErrorResponse(statusCode, message, error = null) {
+  if (error) {
+    console.error(`[ERROR ${statusCode}] ${message}:`, error.message);
+  }
+  return { status: statusCode, json: { error: message } };
+}
 
 // Middleware para desactivar keep-alive y forzar conexiones de una sola vez
 app.use((req, res, next) => {
@@ -62,11 +77,29 @@ function requireAuth(req, res, next) {
 // ============ ENDPOINTS DE AUTENTICACIÓN ============
 
 // Login
+/**
+ * Endpoint de login con validación y rate limiting
+ * POST /api/login
+ * Body: { username: string, password: string }
+ * Returns: { token: string, user: Object }
+ */
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   
+  // Validación de inputs
   if (!username || !password) {
     return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
+  }
+  
+  // Validar longitud de entrada para prevenir ataques
+  if (username.length < config.VALIDATION.USERNAME_MIN_LENGTH || 
+      username.length > config.VALIDATION.USERNAME_MAX_LENGTH) {
+    return res.status(400).json({ error: 'Usuario inválido' });
+  }
+  
+  if (password.length < config.VALIDATION.PASSWORD_MIN_LENGTH || 
+      password.length > config.VALIDATION.PASSWORD_MAX_LENGTH) {
+    return res.status(400).json({ error: 'Contraseña inválida' });
   }
   
   db.get(

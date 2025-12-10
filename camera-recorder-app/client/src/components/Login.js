@@ -12,26 +12,27 @@ export default function Login({ onLogin }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    // credenciales esperadas: usuario "123" y contraseña "123"
-    if (user === '123' && pass === '123') {
-      try {
-        // pedir permiso de cámara antes de proceder
-        const permissionGranted = await requestCameraPermission();
-        if (!permissionGranted) {
-          setError('Se requiere permiso de cámara para continuar.');
-          return;
-        }
-        // avisar al padre que inició sesión correctamente
-        onLogin && onLogin();
-        // redirigir a la "biblioteca"
-        try { history.push('/library'); } catch (err) { /* ignore if no router */ }
-      } catch (err) {
-        console.error('Error al solicitar permiso de cámara', err);
-        setError('Error al solicitar permiso de cámara.');
-      }
-    } else {
-      setError('Usuario o contraseña incorrectos.');
+    if (!user || !pass) {
+      setError('Ingresa usuario y contraseña para continuar.');
+      return;
     }
+
+    try {
+      // pedir permiso de cámara antes de proceder
+      const permissionGranted = await requestCameraPermission();
+      if (!permissionGranted) {
+        setError('Se requiere permiso de cámara para continuar.');
+        return;
+      }
+      // avisar al padre que inició sesión correctamente
+      onLogin && onLogin();
+      // redirigir a la "biblioteca"
+      try { history.push('/library'); } catch (err) { /* ignore if no router */ }
+    } catch (err) {
+      console.error('Error al solicitar permiso de cámara', err);
+      setError('Error al solicitar permiso de cámara.');
+    }
+  };
   };
 
   return (

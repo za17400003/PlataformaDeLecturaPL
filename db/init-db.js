@@ -54,6 +54,31 @@ db.serialize(() => {
       console.error('❌ Error al crear tabla reading_progress:', err.message);
     }
   });
+
+  // Crear índices para optimizar queries
+  db.run('CREATE INDEX IF NOT EXISTS idx_reading_progress_userId ON reading_progress(userId)', (err) => {
+    if (err) {
+      console.error('⚠️ Error al crear índice userId:', err.message);
+    } else {
+      console.log('✅ Índice idx_reading_progress_userId creado');
+    }
+  });
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_reading_progress_bookFile ON reading_progress(bookFile)', (err) => {
+    if (err) {
+      console.error('⚠️ Error al crear índice bookFile:', err.message);
+    } else {
+      console.log('✅ Índice idx_reading_progress_bookFile creado');
+    }
+  });
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_reading_progress_userId_bookFile ON reading_progress(userId, bookFile)', (err) => {
+    if (err) {
+      console.error('⚠️ Error al crear índice userId_bookFile:', err.message);
+    } else {
+      console.log('✅ Índice idx_reading_progress_userId_bookFile creado');
+    }
+  });
 });
 
 module.exports = db;

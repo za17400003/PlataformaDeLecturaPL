@@ -18,6 +18,13 @@ import './lector.css';
 import { useGazepoint } from './hooks/useGazepoint';
 import { useGazeHighlight } from './hooks/useGazeHighlight';
 
+// ============ CONSTANTES ============
+const PROGRESS_SAVE_DEBOUNCE_MS = 2000; // Esperar 2 segundos antes de guardar progreso
+const MIN_PAGES_ESTIMATE = 100; // Número mínimo de "páginas" para calcular locationsPerPage
+const SKIP_RELOCATION_FLAG_TIMEOUT_MS = 300; // Tiempo para resetear el flag de skip (aumentado a 300ms)
+const RETRY_MAX_ATTEMPTS = 2; // Número máximo de reintentos para guardar progreso
+const RETRY_BASE_DELAY_MS = 500; // Retraso base para reintentos con backoff exponencial
+
 export default function Lector(props) {
   const { archivo, onClose, initialPreferences } = props;
   
@@ -33,6 +40,7 @@ export default function Lector(props) {
   const pageCalcRef = useRef({ locationsPerPage: 1, totalLocs: 0, totalPages: 0 });
   const progressLoadedRef = useRef(false); // Bandera para cargar progreso solo una vez
   const saveProgressTimeoutRef = useRef(null); // Para debounce del guardado
+  const skipNextRelocationRef = useRef(false); // Flag para ignorar relocated cuando aplicamos prefs
   
   // ============ ESTADOS DEL LIBRO ============
   const [ready, setReady] = useState(false);
@@ -77,6 +85,12 @@ export default function Lector(props) {
   useGazeHighlight(viewerRef, enableGazeHighlight && gazeConnected);
 
   // ============ FUNCIÓN PARA GUARDAR PROGRESO ============
+  /**
+   * Guarda el progreso de lectura actual en el servidor y localStorage como backup
+   * Implementa reintentos automáticos con backoff exponencial
+   * @param {number} retryCount - Número de intentos realizados (por defecto 0)
+   * @returns {Promise<void>}
+   */
   const saveReadingProgress = React.useCallback(async (retryCount = 0) => {
     const token = localStorage.getItem('authToken');
     if (!token || !archivo) return;
@@ -106,10 +120,11 @@ export default function Lector(props) {
         console.warn('[lector] Sesión expirada al guardar progreso');
         // Guardar en localStorage como backup
         localStorage.setItem(`progress_${archivo}`, JSON.stringify(progressData));
-      } else if (retryCount < 2) {
-        // Reintentar hasta 2 veces si falla
+      } else if (retryCount < RETRY_MAX_ATTEMPTS) {
+        // Reintentar hasta N veces si falla, con backoff exponencial
         console.warn('[lector] Error guardando progreso, reintentando...');
-        setTimeout(() => saveReadingProgress(retryCount + 1), 1000 * (retryCount + 1));
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, retryCount);
+        setTimeout(() => saveReadingProgress(retryCount + 1), delay);
       } else {
         console.error('[lector] Error guardando progreso después de reintentos');
         // Guardar en localStorage como backup
@@ -130,6 +145,11 @@ export default function Lector(props) {
   }, [archivo, currentPage, totalPages, progress]);
 
   // ============ FUNCIÓN PARA CARGAR PROGRESO ============
+  /**
+   * Carga el progreso de lectura guardado desde el servidor
+   * Si falla, intenta cargar desde localStorage como fallback
+   * @returns {Promise<void>}
+   */
   const loadReadingProgress = React.useCallback(async () => {
     const token = localStorage.getItem('authToken');
     if (!token || !archivo || !bookRef.current) return;
@@ -195,8 +215,10 @@ export default function Lector(props) {
   // ============ FUNCIONES DE APLICACIÓN DE ESTILOS ============
   
   /**
-   * Aplica las preferencias de usuario al libro (fuente, tema, tamaño, etc.)
-   * Se ejecuta cada vez que cambian las preferencias o se navega a una nueva página
+   * Aplica las preferencias de usuario al libro (fuente, tema, tamaño, espaciado, brillo)
+   * Se inyecta CSS directamente en cada iframe del EPUB
+   * Optimizado para evitar reflow global mediante selectores específicos
+   * @returns {void}
    */
   const applyPrefsToBook = React.useCallback(() => {
     const rendition = renditionRef.current;
@@ -208,15 +230,21 @@ export default function Lector(props) {
       merri: '"Merriweather", Georgia, serif'
     };
     
+    // CSS optimizado para evitar reflow global
+    // NO usar selector * ya que causa reflow en todos los elementos
+    // En su lugar, aplicar font-size solo a elementos de contenido específicos
     const css = `
-      body {
-        font-family: ${fontMap[prefs.font]} !important;
+      body, p, div, span, h1, h2, h3, h4, h5, h6, a, em, strong, li {
         font-size: ${prefs.fontSize}% !important;
+        font-family: ${fontMap[prefs.font]} !important;
+      }
+      body {
         line-height: ${prefs.lineHeight}!important;
         background: ${prefs.theme === 'dark' ? '#0b0c0c' : prefs.theme === 'sepia' ? '#f4ecd8' : '#ffffff'} !important;
         color: ${prefs.theme === 'dark' ? '#e8f6f5' : '#222222'} !important;
         filter: brightness(${prefs.brightness}) !important;
         padding: 20px !important;
+        margin: 0 !important;
       }
       img {
         max-width: 100% !important;
@@ -225,7 +253,10 @@ export default function Lector(props) {
     `;
     
     try {
-      // Inyectar CSS directamente en el iframe sin remover/recrear para evitar disparar relocated
+      // Marcar para ignorar relocated
+      skipNextRelocationRef.current = true;
+      
+      // Inyectar CSS directamente en el iframe
       requestAnimationFrame(() => {
         const iframes = document.querySelectorAll('iframe');
         iframes.forEach(iframe => {
@@ -257,8 +288,14 @@ export default function Lector(props) {
           }
         });
       });
+      
+      // Limpiar flag después de un pequeño delay
+      setTimeout(() => {
+        skipNextRelocationRef.current = false;
+      }, SKIP_RELOCATION_FLAG_TIMEOUT_MS);
     } catch (e) {
       console.log('[lector] Error aplicando estilos:', e);
+      skipNextRelocationRef.current = false;
     }
   }, [prefs]);
 
@@ -295,6 +332,7 @@ export default function Lector(props) {
   }, [initialPreferences]);
 
   // Inicializar libro
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!archivo) return;
     let mounted = true;
@@ -385,7 +423,7 @@ export default function Lector(props) {
         
         // Alternativa más precisa: dividir locations en "pantallas"
         // Cada pantalla debería ser aproximadamente 30 locations (ajustable)
-        const locationsPerPage = Math.max(1, Math.floor(totalLocs / 100));
+        const locationsPerPage = Math.max(1, Math.floor(totalLocs / MIN_PAGES_ESTIMATE));
         const totalPagesCalc = Math.max(1, Math.ceil(totalLocs / locationsPerPage));
         
         // Guardar en ref para usar en relocated event
@@ -431,9 +469,19 @@ export default function Lector(props) {
         }
 
         // -------- EVENTOS DE RENDITION --------
-        // relocated: se dispara al cambiar de página
-        // Calcula página usando locations normalizadas a "páginas visibles"
+        /**
+         * Evento 'relocated': se dispara al cambiar de página en el EPUB
+         * Recalcula el número de página actual y guarda el progreso con debounce
+         * @param {Object} loc - Ubicación actual en el EPUB (contiene CFI)
+         * @returns {void}
+         */
         rendition.on('relocated', (loc) => {
+          // Si acabamos de aplicar preferencias, ignorar este evento
+          if (skipNextRelocationRef.current) {
+            console.log('[lector] Ignorando relocated después de cambio de preferencias');
+            return;
+          }
+          
           if (!loc || !book.locations.length()) return;
           
           try {
@@ -445,7 +493,7 @@ export default function Lector(props) {
             setProgress(pct * 100);
             
             // Calcular página usando los parámetros guardados
-            const { locationsPerPage, totalPages: totalPagesCalc } = pageCalcRef.current;
+            const { totalPages: totalPagesCalc } = pageCalcRef.current;
             
             // Página = (porcentaje * total de páginas)
             const pageNum = Math.max(1, Math.ceil(pct * totalPagesCalc));
@@ -466,7 +514,7 @@ export default function Lector(props) {
             saveProgressTimeoutRef.current = setTimeout(() => {
               saveReadingProgress();
               saveProgressTimeoutRef.current = null;
-            }, 2000);
+            }, PROGRESS_SAVE_DEBOUNCE_MS);
           } catch (e) {
             console.error('[lector] Error calculando página:', e);
           }
@@ -503,14 +551,23 @@ export default function Lector(props) {
         if (bookRef.current) bookRef.current.destroy();
       } catch (_) {}
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [archivo, applyPrefsToBook]);
 
   // Aplicar estilos cuando cambien las preferencias
   // NO incluir applyPrefsToBook en las dependencias para evitar loops infinitos
+  // applyPrefsToBook muta dependiendo de prefs, así que incluirla causaría rerender infinito
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (ready && renditionRef.current) {
       // Usar requestAnimationFrame para aplicar estilos sin disparar relocated
       requestAnimationFrame(() => {
+        // Aplicar clase de tema al body para CSS tema completo
+        document.body.classList.remove('light-theme', 'sepia-theme', 'dark-theme');
+        if (prefs.theme !== 'light') {
+          document.body.classList.add(`${prefs.theme}-theme`);
+        }
+        
         applyPrefsToBook();
       });
     }
@@ -546,17 +603,23 @@ export default function Lector(props) {
   
   /**
    * Avanza a la siguiente página del libro
+   * Aplica estilos antes de cambiar para evitar parpadeo
    */
   const goNext = () => {
     if (!renditionRef.current) return;
+    // Aplicar estilos antes de cambiar página para evitar parpadeo blanco
+    applyPrefsToBook();
     renditionRef.current.next().catch(() => {});
   };
 
   /**
    * Retrocede a la página anterior del libro
+   * Aplica estilos antes de cambiar para evitar parpadeo
    */
   const goPrev = () => {
     if (!renditionRef.current) return;
+    // Aplicar estilos antes de cambiar página para evitar parpadeo blanco
+    applyPrefsToBook();
     renditionRef.current.prev().catch(() => {});
   };
 

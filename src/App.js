@@ -32,6 +32,7 @@ function App() {
           if (data.id) {
             setUserData(data);
             setLoginExitoso(true);
+            setCheckingSession(false);
           } else {
             localStorage.removeItem('authToken');
             setCheckingSession(false);
@@ -42,36 +43,10 @@ function App() {
           setCheckingSession(false);
         });
     } else {
-      // Si no hay token, intentar login automático con admin/123
-      autoLogin();
-    }
-  }, []);
-
-  // Login automático con credenciales por defecto
-  const autoLogin = async () => {
-    try {
-      const response = await fetch('http://localhost:3000/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username: 'admin', password: '123' })
-      });
-
-      const data = await response.json();
-      
-      if (response.ok && data.token) {
-        localStorage.setItem('authToken', data.token);
-        setUserData(data.user);
-        setLoginExitoso(true);
-      } else {
-        setCheckingSession(false);
-      }
-    } catch (error) {
-      console.error('Error en auto-login:', error);
+      // Si no hay token, mostrar pantalla de login
       setCheckingSession(false);
     }
-  };
+  }, []);
 
   const iniciarSesion = async () => {
     setCargando(true);
@@ -135,13 +110,13 @@ function App() {
       setTimeout(() => {
         // Después de la animación, cambiar de pantalla
         setLoginExitoso(false);
-        setCheckingSession(false);
         setUsuario('');
         setContrasena('');
         setMensajeBoton('Iniciar sesión'); // Restaurar texto del botón
         setAnimarSalida(false);
         setAnimarEntrada(false);
         localStorage.removeItem('authToken');
+        setUserData(null);
       }, 1500);
     };
     

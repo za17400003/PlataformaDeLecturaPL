@@ -159,14 +159,12 @@ html, body {
   min-height: 100vh;
   max-height: 100vh; /* Evitar desborde vertical */
   max-width: 100vw; /* Evitar overflow horizontal */
-  /* Fondo: Paleta suave y relajante */
+  /* Fondo: 2/3 blanco, 1/3 azul */
   background: 
     linear-gradient(to bottom,
-      #E8F4FD 0%,      /* Azul muy suave en el horizonte */
-      #F0F9FF 20%,     /* Azul hielo */
-      #FAFCFF 45%,     /* Casi blanco con tinte azul */
-      #FFFFFF 70%,     /* Blanco puro */
-      #FEFEFE 100%     /* Blanco cálido */
+      #FFFFFF 0%,      /* Blanco puro */
+      #FFFFFF 66.67%,  /* Blanco hasta 2/3 de altura */
+      #4BA5E8 100%     /* Azul en el 1/3 inferior */
     );
   font-family: 'Fredoka', 'Comic Neue', cursive;
   position: relative;
@@ -176,7 +174,8 @@ html, body {
   box-sizing: border-box;
 }
 
-/* Mar de nubes con perspectiva - Colores suaves */
+/* Mar de nubes con perspectiva - Paleta realista */
+/* Pseudo-elemento para overlay (no usado actualmente) */
 .Biblioteca::before {
   content: '';
   position: absolute;
@@ -184,29 +183,9 @@ html, body {
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: 
-    /* Nubes lejanas en el horizonte (sutiles) */
-    radial-gradient(ellipse 40px 12px at 25% 15%, rgba(255,255,255,0.2) 0%, transparent 50%),
-    radial-gradient(ellipse 30px 10px at 75% 18%, rgba(255,255,255,0.15) 0%, transparent 50%),
-    radial-gradient(ellipse 35px 11px at 50% 20%, rgba(255,255,255,0.1) 0%, transparent 50%),
-    
-    /* Nubes medias (perspectiva media) */
-    radial-gradient(ellipse 80px 30px at 15% 35%, rgba(255,255,255,0.25) 0%, transparent 60%),
-    radial-gradient(ellipse 100px 35px at 85% 40%, rgba(255,255,255,0.2) 0%, transparent 60%),
-    radial-gradient(ellipse 90px 32px at 60% 45%, rgba(255,255,255,0.25) 0%, transparent 60%),
-    
-    /* Nubes cercanas (suaves y elegantes) */
-    radial-gradient(ellipse 160px 60px at 10% 70%, rgba(255,255,255,0.3) 0%, transparent 70%),
-    radial-gradient(ellipse 200px 80px at 90% 75%, rgba(255,255,255,0.25) 0%, transparent 70%),
-    radial-gradient(ellipse 140px 55px at 40% 80%, rgba(255,255,255,0.35) 0%, transparent 70%),
-    
-    /* Nubes muy cercanas (sutiles) */
-    radial-gradient(ellipse 250px 100px at 20% 90%, rgba(255,255,255,0.4) 0%, transparent 80%),
-    radial-gradient(ellipse 300px 120px at 80% 95%, rgba(255,255,255,0.3) 0%, transparent 80%);
-  
-  animation: cloudSeaFloat 30s ease-in-out infinite;
   z-index: 0;
   pointer-events: none;
+  /* Degradado ya está en .Biblioteca, este es solo para mantener compatibilidad de z-index */
 }
 
 /* Botón de logout */
@@ -228,7 +207,7 @@ html, body {
 }
 
 .Logout-button:hover {
-  background: rgba(145, 207, 255, 0.2);
+  background: rgba(255, 255, 255, 0.9);
   border-color: #4BA5E8;
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
@@ -613,6 +592,26 @@ html, body {
   width: 100%;
 }
 
+/* Títulos en el grid inferior (papalotes) - Color blanco */
+.Titulo-libro.titulo-papalote {
+  color: #FFFFFF; /* Blanco puro */
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.3); /* Sombra para contraste */
+}
+
+/* Contenedor de papalotes - Un poco más grandes que las nubes */
+.Libro-nube:has(.Titulo-libro.titulo-papalote) {
+  max-width: 360px; /* Aumentar max-width para papalotes sin cortes */
+  overflow: visible; /* Permitir que el fondo se vea sin cortes */
+}
+
+.Libro-nube:has(.Titulo-libro.titulo-papalote) .Nube-blanca {
+  background-size: 66%; /* Tamaño optimizado para ver papalote completo */
+  width: 280px; /* 280px vs 260px de las nubes (+20px) */
+  height: 220px; /* 220px vs 200px de las nubes (+20px) */
+  overflow: visible; /* Permitir papalote sin cortes */
+  padding: 10px; /* Agregar padding para que el background respire */
+}
+
 /* Sincronización con animaciones de nubes - Simplificada */
 .Nube-blanca:nth-child(1) .Titulo-libro {
   animation: fadeInTitle 0.45s ease-out forwards, titleFloat1 3.5s ease-in-out infinite;
@@ -740,6 +739,7 @@ html, body {
   width: 260px;
   height: 200px;
   border-radius: 16px;
+  background: -webkit-linear-gradient(90deg, #F0F4FF 0%, #E8F2FF 50%, #F0F4FF 100%);
   background: linear-gradient(90deg, #F0F4FF 0%, #E8F2FF 50%, #F0F4FF 100%);
   border: 1px solid rgba(139, 157, 195, 0.1);
   box-shadow: 0 4px 12px rgba(139, 157, 195, 0.08);
@@ -796,6 +796,7 @@ html, body {
   width: 140px;
   height: 18px;
   border-radius: 8px;
+  background: -webkit-linear-gradient(90deg, rgba(10,40,44,0.06), rgba(10,40,44,0.03));
   background: linear-gradient(90deg, rgba(10,40,44,0.06), rgba(10,40,44,0.03));
   margin: 8px auto 0;
   text-align: center;
