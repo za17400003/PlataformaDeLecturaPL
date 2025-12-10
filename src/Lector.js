@@ -113,9 +113,13 @@ export default function Lector(props) {
       });
 
       if (response.ok) {
-        console.log('[lector] Progreso guardado:', { currentPage, totalPages });
-        // Guardar en localStorage como backup
-        localStorage.setItem(`progress_${archivo}`, JSON.stringify(progressData));
+        console.log('[lector] Progreso guardado:', { currentPage, totalPages, progress });
+        // Guardar en localStorage como backup (incluir porcentaje)
+        localStorage.setItem(`progress_${archivo}`, JSON.stringify({
+          currentPage,
+          totalPages,
+          progress // El porcentaje es lo más importante
+        }));
       } else if (response.status === 401) {
         console.warn('[lector] Sesión expirada al guardar progreso');
         // Guardar en localStorage como backup
@@ -164,18 +168,34 @@ export default function Lector(props) {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.currentPage > 1 && renditionRef.current && bookRef.current?.locations.length()) {
-          // Ir a la página guardada
-          const percentage = (data.currentPage - 1) / (data.totalPages || 1);
+        // Usar el porcentaje guardado (es más confiable que la página)
+        // Porque el porcentaje es independiente de cuántas páginas haya calculado
+        if (data.progress !== undefined && renditionRef.current && bookRef.current?.locations.length()) {
           try {
+            // Convertir porcentaje a CFI (Canonical Fragment Identifier)
+            const percentage = data.progress / 100;
             const targetCfi = bookRef.current.locations.cfiFromPercentage(percentage);
             if (targetCfi) {
               await renditionRef.current.display(targetCfi);
-              console.log('[lector] Progreso cargado del servidor:', data.currentPage, '/', data.totalPages);
+              console.log('[lector] Progreso cargado del servidor: ', (data.progress).toFixed(1), '%');
               return; // Éxito
             }
           } catch (err) {
-            console.error('[lector] Error al navegar al progreso guardado:', err);
+            console.error('[lector] Error al navegar al progreso guardado (vía porcentaje):', err);
+          }
+        }
+        // Fallback: si no tiene progreso, intenta con currentPage (para compatibilidad con datos antiguos)
+        if (data.currentPage > 1 && renditionRef.current && bookRef.current?.locations.length()) {
+          try {
+            const percentage = (data.currentPage - 1) / (data.totalPages || 1);
+            const targetCfi = bookRef.current.locations.cfiFromPercentage(percentage);
+            if (targetCfi) {
+              await renditionRef.current.display(targetCfi);
+              console.log('[lector] Progreso cargado del servidor (fallback):', data.currentPage, '/', data.totalPages);
+              return; // Éxito
+            }
+          } catch (err) {
+            console.error('[lector] Error al navegar al progreso guardado (fallback):', err);
           }
         }
       } else if (response.status === 404) {
@@ -194,21 +214,35 @@ export default function Lector(props) {
       const localProgress = localStorage.getItem(`progress_${archivo}`);
       if (localProgress && renditionRef.current && bookRef.current?.locations.length()) {
         const data = JSON.parse(localProgress);
-        if (data.currentPage > 1) {
+        // Usar porcentaje si está disponible
+        if (data.progress !== undefined) {
+          const percentage = data.progress / 100;
+          try {
+            const targetCfi = bookRef.current.locations.cfiFromPercentage(percentage);
+            if (targetCfi) {
+              await renditionRef.current.display(targetCfi);
+              console.log('[lector] Progreso cargado de localStorage:', (data.progress).toFixed(1), '%');
+            }
+          } catch (err) {
+            console.error('[lector] Error al navegar al progreso de localStorage:', err);
+          }
+        }
+        // Fallback para datos antiguos
+        else if (data.currentPage > 1) {
           const percentage = (data.currentPage - 1) / (data.totalPages || 1);
           try {
             const targetCfi = bookRef.current.locations.cfiFromPercentage(percentage);
             if (targetCfi) {
               await renditionRef.current.display(targetCfi);
-              console.log('[lector] Progreso cargado del localStorage:', data.currentPage, '/', data.totalPages);
+              console.log('[lector] Progreso cargado de localStorage (fallback):', data.currentPage, '/', data.totalPages);
             }
           } catch (err) {
-            console.error('[lector] Error navegando con progreso del localStorage:', err);
+            console.error('[lector] Error al navegar al progreso de localStorage (fallback):', err);
           }
         }
       }
     } catch (err) {
-      console.error('[lector] Error cargando progreso del localStorage:', err);
+      console.error('[lector] Error procesando localStorage fallback:', err);
     }
   }, [archivo]);
 
@@ -555,6 +589,7 @@ export default function Lector(props) {
   }, [archivo, applyPrefsToBook]);
 
   // Aplicar estilos cuando cambien las preferencias
+  // Recalcular totalPages cuando cambia fontSize porque afecta la paginación
   // NO incluir applyPrefsToBook en las dependencias para evitar loops infinitos
   // applyPrefsToBook muta dependiendo de prefs, así que incluirla causaría rerender infinito
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -570,8 +605,68 @@ export default function Lector(props) {
         
         applyPrefsToBook();
       });
+      
+      // Recalcular totalPages cuando cambia fontSize
+      // fontSize afecta la paginación porque aumenta el tamaño del contenido
+      // Similar a Google Play Books que recalcula páginas dinámicamente
+      if (prefs.fontSize !== undefined) {
+        const timeoutId = setTimeout(() => {
+          const book = bookRef.current;
+          if (book && book.locations.length()) {
+            // Recalcular según el nuevo fontSize y lineHeight
+            // Aplicar factor de escala inverso al cálculo de páginas
+            const totalLocs = book.locations.length();
+            
+            // Factor por fontSize: 100% = 1.0, 137% = 1.37
+            const fontSizeRatio = prefs.fontSize / 100;
+            
+            // Factor por lineHeight: 1.45 (defecto) = 1.0
+            // Si aumenta lineHeight, menos contenido cabe (más páginas)
+            const lineHeightRatio = prefs.lineHeight / 1.45;
+            
+            // Factor combinado: mayor fontSize O lineHeight = menos contenido por página
+            const combinedRatio = fontSizeRatio * lineHeightRatio;
+            
+            // Cuanto mayor el factor combinado, menos contenido cabe por página
+            // Por lo tanto, más páginas totales
+            const scaledLocationsPerPage = Math.max(
+              1, 
+              Math.floor((totalLocs / MIN_PAGES_ESTIMATE) / combinedRatio)
+            );
+            const newTotalPages = Math.max(1, Math.ceil(totalLocs / scaledLocationsPerPage));
+            
+            // Actualizar ref con nuevos valores
+            pageCalcRef.current = { 
+              locationsPerPage: scaledLocationsPerPage, 
+              totalLocs, 
+              totalPages: newTotalPages,
+              fontSizeRatio,
+              lineHeightRatio
+            };
+            
+            // Mantener el porcentaje de progreso pero recalcular página actual
+            const currentPercentage = progress / 100;
+            const newCurrentPage = Math.max(1, Math.ceil(currentPercentage * newTotalPages));
+            
+            setTotalPages(newTotalPages);
+            setCurrentPage(newCurrentPage);
+            
+            console.log('[lector] Pages recalculadas por fontSize/lineHeight:', {
+              fontSize: prefs.fontSize + '%',
+              lineHeight: prefs.lineHeight,
+              combinedRatio: combinedRatio.toFixed(3),
+              scaledLocationsPerPage,
+              newTotalPages,
+              currentPercentage: (currentPercentage * 100).toFixed(1) + '%',
+              newCurrentPage
+            });
+          }
+        }, 300); // Esperar 300ms después del cambio de fontSize
+        
+        return () => clearTimeout(timeoutId);
+      }
     }
-  }, [prefs, ready]);
+  }, [prefs, ready, progress]);
 
   // Si Gazepoint se desconecta durante grabación, detener
   useEffect(() => {

@@ -338,7 +338,7 @@ function Biblioteca({ userData, onLogout }) {
 
         {/* Mensaje de bienvenida */}
         <div className="Welcome-message">
-          <span>Bienvenido, <strong>{userData?.username || 'Usuario'}</strong></span>
+          <span>Bienvenid@, <strong>{userData?.username || 'Usuario'}</strong></span>
         </div>
 
         {/* Botón de logout y opciones de desarrollador */}
