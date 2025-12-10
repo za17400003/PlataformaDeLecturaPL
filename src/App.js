@@ -4,6 +4,7 @@ import './App.css';
 import solAnimado from './assets/sol.png';
 import pajaritos from './assets/pajaros.png';
 import Biblioteca from './biblioteca';
+import RegistroPopover from './RegistroPopover';
 
 function App() {
   const [usuario, setUsuario] = useState('');
@@ -16,6 +17,7 @@ function App() {
   const [animarEntrada, setAnimarEntrada] = useState(false);
   const [userData, setUserData] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [mostrarRegistro, setMostrarRegistro] = useState(false);
 
   // Verificar si hay una sesión activa al cargar
   useEffect(() => {
@@ -173,6 +175,17 @@ function App() {
         >
           {cargando ? <div className="loader" /> : mensajeBoton}
         </button>
+
+        <div className="Login-divider">
+          <span>¿No tienes cuenta?</span>
+        </div>
+
+        <button
+          className="Boton-registrar"
+          onClick={() => setMostrarRegistro(true)}
+        >
+          Crear cuenta
+        </button>
       </div>
 
       <img
@@ -180,6 +193,16 @@ function App() {
         alt="Pajaritos en rama"
         className={`Imagen-pajaros ${animarSalida ? 'pajaros-salida' : ''} ${animarEntrada ? 'pajaros-entrada' : ''}`}
       />
+
+      {mostrarRegistro && (
+        <RegistroPopover
+          onClose={() => setMostrarRegistro(false)}
+          onRegistroExitoso={(username) => {
+            setUsuario(username);
+            setContrasena('');
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -156,6 +156,75 @@ app.post('/api/login', (req, res) => {
   );
 });
 
+// Register - Crear nueva cuenta
+/**
+ * Endpoint para registrar un nuevo usuario
+ * POST /api/register
+ * Body: { username: string, password: string }
+ * Returns: { message: string }
+ */
+app.post('/api/register', async (req, res) => {
+  const { username, password } = req.body;
+  
+  // Validación de inputs
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
+  }
+  
+  // Validar longitud de entrada
+  if (username.length < config.VALIDATION.USERNAME_MIN_LENGTH || 
+      username.length > config.VALIDATION.USERNAME_MAX_LENGTH) {
+    return res.status(400).json({ error: 'Usuario debe tener entre 3 y 50 caracteres' });
+  }
+  
+  if (password.length < config.VALIDATION.PASSWORD_MIN_LENGTH || 
+      password.length > config.VALIDATION.PASSWORD_MAX_LENGTH) {
+    return res.status(400).json({ error: 'Contraseña debe tener entre 4 y 100 caracteres' });
+  }
+  
+  // Verificar si el usuario ya existe
+  db.get(
+    'SELECT id FROM users WHERE username = ?',
+    [username],
+    async (err, existingUser) => {
+      if (err) {
+        console.error('Error verificando usuario:', err);
+        return res.status(500).json({ error: 'Error del servidor' });
+      }
+      
+      if (existingUser) {
+        return res.status(409).json({ error: 'El usuario ya existe' });
+      }
+      
+      try {
+        // Hashear contraseña
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // Insertar nuevo usuario
+        db.run(
+          `INSERT INTO users (username, password, isDeveloper, preferences)
+           VALUES (?, ?, ?, ?)`,
+          [username, hashedPassword, 0, JSON.stringify({ fontSize: 100, theme: 'light', font: 'original', lineHeight: 1.45, brightness: 1.0 })],
+          function(err) {
+            if (err) {
+              console.error('Error creando usuario:', err);
+              return res.status(500).json({ error: 'Error al crear la cuenta' });
+            }
+            
+            res.status(201).json({ 
+              message: 'Cuenta creada exitosamente',
+              userId: this.lastID
+            });
+          }
+        );
+      } catch (hashErr) {
+        console.error('Error hasheando contraseña:', hashErr);
+        return res.status(500).json({ error: 'Error del servidor' });
+      }
+    }
+  );
+});
+
 // Logout
 app.post('/api/logout', requireAuth, (req, res) => {
   const authHeader = req.headers.authorization;

@@ -342,70 +342,97 @@ html, body {
   align-items: center;
   justify-content: center;
   width: 100%;
-  max-width: 1400px;
+  max-width: 100%;
   position: relative;
   margin: 0 auto 2rem auto; /* Reducir margen inferior */
-  padding: 0 2rem 1rem 2rem; /* Reducir padding */
+  padding: 0 1rem 1rem 1rem; /* Padding adaptativo */
 }
 
 /* Grilla de libros: más cerca del título */
 .Nubes-blancas {
   display: grid;
-  grid-template-columns: repeat(3, 1fr); /* 3 columnas en desktop */
-  grid-template-rows: auto auto;
-  gap: 1.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Flexible, responde al contenedor */
+  grid-auto-rows: auto;
+  gap: 1.5rem 1rem; /* Gap más eficiente (row gap, col gap) */
   justify-items: center;
   align-items: start;
   width: 100%;
-  max-width: 1200px; /* Limitar ancho máximo para mejor control */
+  max-width: 1400px; /* Control más estricto del ancho */
   position: relative;
   z-index: 1;
-  padding: 0.5rem 2rem 4rem 2rem; /* Padding más controlado */
+  padding: 0.5rem 1rem 4rem 1rem; /* Padding simétrico y contenido */
   margin: 0 auto; /* centrar la grilla */
   box-sizing: border-box;
   overflow: visible; /* Permitir que títulos sobresalgan */
 }
 
-/* Tablets */
-@media (max-width: 1024px) {
+/* Pantalla Ultra-wide (>1600px) - optimizar espacio horizontal */
+@media (min-width: 1600px) {
   .Nubes-blancas {
-    grid-template-columns: repeat(2, 1fr); /* 2 columnas en tablet */
-    grid-template-rows: auto auto auto; /* 3 filas para 6 elementos */
-    gap: 1.5rem;
-    max-width: 90%; /* Reducir ancho para que quepan mejor */
-    padding: 1rem 2rem 5rem 2rem; /* Padding controlado */
+    grid-template-columns: repeat(4, minmax(280px, 1fr)); /* 4 columnas en pantallas muy anchas */
+    gap: 2rem 1.5rem; /* Más gap en pantallas anchas */
+    max-width: 1400px; /* Expandir max-width */
+  }
+}
+
+/* Pantalla grande (1200px-1599px) - optimizar 3 columnas */
+@media (min-width: 1200px) and (max-width: 1599px) {
+  .Nubes-blancas {
+    grid-template-columns: repeat(3, minmax(300px, 1fr));
+    gap: 1.8rem 1.2rem;
+    max-width: 1100px;
+    padding: 0.5rem 1.5rem 4rem 1.5rem;
+  }
+}
+
+/* Pantalla mediana (1025px-1199px) - Transición suave a tablet */
+@media (min-width: 1025px) and (max-width: 1199px) {
+  .Nubes-blancas {
+    grid-template-columns: repeat(3, minmax(260px, 1fr));
+    gap: 1.4rem 1rem;
+    max-width: 900px;
+    padding: 0.5rem 1rem 4rem 1rem;
+  }
+}
+
+/* Tablet landscape (768px-1024px) - 2 columnas */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .Nubes-blancas {
+    grid-template-columns: repeat(2, minmax(250px, 1fr));
+    gap: 1.2rem 0.8rem;
+    max-width: 600px;
+    padding: 0.5rem 1rem 4rem 1rem;
+  }
+}
+
+/* Tablet portrait y mobile (< 768px) - 2 columnas */
+@media (max-width: 767px) {
+  .Nubes-blancas {
+    grid-template-columns: repeat(2, minmax(200px, 1fr));
+    gap: 1rem 0.6rem;
+    max-width: 500px;
+    padding: 0.5rem 0.5rem 4rem 0.5rem;
+  }
+}
+
+/* Móbil landscape (481px-768px) - 2 columnas optimizadas */
+@media (min-width: 481px) and (max-width: 768px) {
+  .Nubes-blancas {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+    gap: 1rem 0.8rem;
+    max-width: 95vw;
+    padding: 0.5rem 0.8rem 5rem 0.8rem;
     box-sizing: border-box;
   }
 }
 
-/* Móviles: 2 columnas (mejor aprovechamiento del espacio) */
-@media (max-width: 768px) {
-  .navbar-biblioteca {
-    padding: 0.8rem 1rem;
-    margin-bottom: 1rem; /* reducir margen en mobile */
-  }
-  
-  .library-container {
-    padding-top: 0.5rem; /* reducir espacio superior en mobile */
-  }
-  
-  .Nubes-blancas {
-    grid-template-columns: repeat(2, 1fr); /* 2 columnas en móvil */
-    grid-template-rows: repeat(3, auto); /* 3 filas para 6 elementos */
-    gap: 1rem;
-    max-width: 95%; /* Reducir más el ancho para que quepan */
-    padding: 0.5rem 1rem 5rem 1rem; /* Menos padding lateral */
-    box-sizing: border-box;
-  }
-}
-
-/* Móviles pequeños: 2 columnas compactas pero visibles */
+/* Móvil portrait pequeño (360px-480px) - Compacto */
 @media (max-width: 480px) {
   .Nubes-blancas {
-    grid-template-columns: repeat(2, 1fr); /* mantener 2 columnas */
-    padding: 0.5rem 0.5rem 6rem 0.5rem; /* Padding mínimo */
-    gap: 0.8rem;
-    max-width: 98%; /* Casi todo el ancho disponible */
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+    padding: 0.5rem 0.6rem 6rem 0.6rem;
+    gap: 0.8rem 0.6rem;
+    max-width: 98vw;
     box-sizing: border-box;
   }
 }
@@ -418,26 +445,51 @@ html, body {
   align-items: center;
   justify-content: center;
   text-align: center;
-  min-height: 320px; /* Más altura para títulos */
+  min-height: 300px; /* Altura ajustada para mejor balance */
   padding-bottom: 2rem; /* Espacio para título flotante */
   width: 100%;
-  max-width: 300px;
+  max-width: 100%; /* Usar el ancho disponible del grid */
   overflow: visible; /* Permitir que título sobresalga */
 }
 
-/* Responsive para libro-nube */
-@media (max-width: 768px) {
+/* Pantalla grande (>1200px) */
+@media (min-width: 1200px) {
   .Libro-nube {
-    min-height: 240px; /* Reducir altura en mobile para que quepan mejor */
-    max-width: 180px; /* Reducir ancho significativamente */
-    padding-bottom: 2rem; /* Reducir padding */
+    min-height: 340px;
+    max-width: 320px;
   }
 }
 
+/* Pantalla mediana (1025px-1199px) */
+@media (min-width: 1025px) and (max-width: 1199px) {
+  .Libro-nube {
+    min-height: 300px;
+    max-width: 280px;
+  }
+}
+
+/* Tablet (769px-1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .Libro-nube {
+    min-height: 260px;
+    max-width: 240px;
+  }
+}
+
+/* Móvil landscape (481px-768px) */
+@media (min-width: 481px) and (max-width: 768px) {
+  .Libro-nube {
+    min-height: 240px; /* Reducir altura en mobile para que quepan mejor */
+    max-width: 200px; /* Ancho adaptativo */
+    padding-bottom: 1.8rem; /* Reducir padding */
+  }
+}
+
+/* Móvil portrait pequeño (360px-480px) */
 @media (max-width: 480px) {
   .Libro-nube {
     min-height: 220px; /* Más compacto en móviles pequeños */
-    max-width: 160px; /* Aún más pequeño */
+    max-width: 180px; /* Ancho óptimo */
     padding-bottom: 1.5rem;
   }
 }
@@ -506,24 +558,38 @@ html, body {
 }
 
 /* Responsive para nubes */
-@media (max-width: 1024px) {
+@media (min-width: 1200px) {
   .Nube-blanca {
-    width: 220px;
-    height: 170px;
+    width: 280px;
+    height: 210px;
   }
 }
 
-@media (max-width: 768px) {
+@media (min-width: 1025px) and (max-width: 1199px) {
   .Nube-blanca {
-    width: 180px; /* Más pequeño para que quepan 2 columnas */
-    height: 140px;
+    width: 240px;
+    height: 180px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .Nube-blanca {
+    width: 200px;
+    height: 150px;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  .Nube-blanca {
+    width: 170px; /* Más pequeño para que quepan 2 columnas */
+    height: 130px;
   }
 }
 
 @media (max-width: 480px) {
   .Nube-blanca {
-    width: 160px; /* Aún más pequeño para móviles */
-    height: 120px;
+    width: 150px; /* Aún más pequeño para móviles */
+    height: 110px;
     padding: 0.3rem;
   }
 }
@@ -638,7 +704,25 @@ html, body {
 }
 
 /* Responsive para títulos - Mejor posicionamiento */
-@media (max-width: 768px) {
+@media (min-width: 1200px) {
+  .Titulo-libro {
+    font-size: 0.95rem; /* Más grande en pantallas amplias */
+    max-width: 200px;
+    line-height: 1.4;
+    margin-top: 0.6rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .Titulo-libro {
+    font-size: 0.85rem;
+    max-width: 160px;
+    line-height: 1.3;
+    margin-top: 0.5rem;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
   .Titulo-libro {
     font-size: 0.8rem; /* Más pequeño para que quepa */
     max-width: 140px; /* Reducir ancho */
@@ -649,8 +733,8 @@ html, body {
 
 @media (max-width: 480px) {
   .Titulo-libro {
-    font-size: 0.75rem; /* Aún más pequeño */
-    max-width: 130px;
+    font-size: 0.7rem; /* Aún más pequeño */
+    max-width: 120px;
     margin-top: 0.3rem;
     line-height: 1.1;
   }
@@ -808,7 +892,7 @@ html, body {
 
 /* Portada del libro */
 .Portada {
-  width: 92px;
+  width: 90px;
   height: auto;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
@@ -820,7 +904,13 @@ html, body {
 }
 
 /* Responsive para portadas */
-@media (max-width: 768px) {
+@media (min-width: 1200px) {
+  .Portada {
+    width: 100px; /* Más grande para pantallas grandes */
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
   .Portada {
     width: 75px; /* Más pequeño para que quepan mejor en 2 columnas */
   }
@@ -828,7 +918,7 @@ html, body {
 
 @media (max-width: 480px) {
   .Portada {
-    width: 70px; /* Tamaño compacto para móviles pequeños */
+    width: 65px; /* Tamaño compacto para móviles pequeños */
   }
 }
 /* (Titulo-libro definido arriba with animation & styles) */

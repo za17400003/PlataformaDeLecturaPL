@@ -1,0 +1,191 @@
+/* Popover de Registro */
+.RegistroPopover-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.RegistroPopover-content {
+  background: linear-gradient(135deg, #ffffff 0%, #f0f9f8 100%);
+  border-radius: 20px;
+  padding: 2rem;
+  box-shadow: 0 10px 40px rgba(0, 166, 157, 0.2);
+  border: 2px solid #aef3ef;
+  max-width: 350px;
+  width: 90%;
+  animation: slideUp 0.3s ease-out;
+  position: relative;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.RegistroPopover-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #00a69d;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s;
+}
+
+.RegistroPopover-close:hover {
+  transform: scale(1.2);
+}
+
+.RegistroPopover-title {
+  color: #00a69d;
+  font-family: 'Comic Neue', cursive;
+  font-size: 1.5rem;
+  margin: 0 0 1.5rem 0;
+  text-align: center;
+}
+
+.RegistroPopover-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.RegistroPopover-input {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 1rem;
+  border: 2px solid #00a69d;
+  border-radius: 10px;
+  font-family: 'Comic Neue', cursive;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  color: #00a69d;
+  transition: all 0.3s ease;
+}
+
+.RegistroPopover-input::placeholder {
+  color: #aef3ef;
+}
+
+.RegistroPopover-input:focus {
+  outline: none;
+  border-color: #00a69d;
+  box-shadow: 0 0 0 3px rgba(0, 166, 157, 0.1);
+}
+
+.RegistroPopover-input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.RegistroPopover-error {
+  background-color: #ffebee;
+  color: #d32f2f;
+  padding: 0.75rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  border-left: 4px solid #d32f2f;
+  font-family: 'Comic Neue', cursive;
+}
+
+.RegistroPopover-exito {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 0.75rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  border-left: 4px solid #2e7d32;
+  font-family: 'Comic Neue', cursive;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.RegistroPopover-btn-crear {
+  background-color: #d946ef;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 12px;
+  font-size: 1rem;
+  cursor: pointer;
+  font-family: 'Comic Neue', cursive;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  box-shadow: 0 4px 12px rgba(217, 70, 239, 0.3);
+}
+
+.RegistroPopover-btn-crear:hover:not(:disabled) {
+  background-color: #c026d3;
+  box-shadow: 0 6px 16px rgba(217, 70, 239, 0.4);
+  transform: translateY(-2px);
+}
+
+.RegistroPopover-btn-crear:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.RegistroPopover-btn-crear:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.loader-registro {
+  border: 3px solid #ffffff;
+  border-top: 3px solid #d946ef;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

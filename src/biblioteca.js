@@ -43,9 +43,12 @@ function Biblioteca({ userData, onLogout }) {
   const [libroSeleccionado, setLibroSeleccionado] = useState(null); // Libro abierto en el lector
   const [cargandoPortadas, setCargandoPortadas] = useState(false); // Estado de carga
   const [paginationInfo, setPaginationInfo] = useState(null); // Info de paginación del servidor
-  const [papalotesAleatorios, setpapalotesAleatorios] = useState([]); // 3 papalotes aleatorios para grid inferior
-  const librosPorPagina = 6; // Constante: 6 libros por página
+  const [papalotesAleatorios, setpapalotesAleatorios] = useState([]); // Papalotes para la última fila
+  const [columnasVisibles, setColumnasVisibles] = useState(3); // Columnas detectadas según ancho pantalla
   const papalotesDisponibles = [papalote1, papalote2, papalote3, papalote4, papalote5, papalote6];
+  
+  // Calcular items por página dinámicamente: siempre dos filas (superior = nubes, inferior = papalotes)
+  const librosPorPagina = columnasVisibles * 2;
 
   // ============ HANDLERS DE USUARIO (SOLO DESARROLLADOR) ============
   
@@ -120,12 +123,14 @@ function Biblioteca({ userData, onLogout }) {
   // ============ HANDLERS GENERALES ============
   
   /**
-   * Genera 3 papalotes aleatorios diferentes
+   * Genera papalotes aleatorios diferentes según la cantidad de columnas
+   * @param {number} cantidad - Cantidad de papalotes a generar
    */
-  const generarPapalotesAleatorios = () => {
+  const generarPapalotesAleatorios = (cantidad = columnasVisibles) => {
     const indices = Array.from({ length: 6 }, (_, i) => i); // [0, 1, 2, 3, 4, 5]
     const seleccionados = [];
-    for (let i = 0; i < 3; i++) {
+    const itemsNeeded = Math.min(cantidad, 6); // No más de 6 papalotes diferentes
+    for (let i = 0; i < itemsNeeded; i++) {
       const randomIdx = Math.floor(Math.random() * indices.length);
       seleccionados.push(papalotesDisponibles[indices[randomIdx]]);
       indices.splice(randomIdx, 1); // Remover para no repetir
@@ -179,6 +184,9 @@ function Biblioteca({ userData, onLogout }) {
         setLibros(data.books || []);
         setPaginationInfo(data.pagination);
         
+        // Generar papalotes para la última fila según columnas visibles
+        generarPapalotesAleatorios(columnasVisibles);
+        
         // Cargar solo las portadas de los libros de esta página
         const resultados = await Promise.all(
           (data.books || []).map(async (libro) => {
@@ -213,7 +221,6 @@ function Biblioteca({ userData, onLogout }) {
         );
         
         setPortadas(resultados);
-        generarPapalotesAleatorios(); // Generar nuevos papalotes cuando se cargan libros
       } catch (err) {
         console.error('Error al cargar página:', err);
         setLibros([]);
@@ -224,7 +231,7 @@ function Biblioteca({ userData, onLogout }) {
     };
 
     cargarPagina(paginaActual);
-  }, [paginaActual, librosPorPagina]);
+  }, [paginaActual, columnasVisibles]);
 
   // ============ FUNCIONES DE NAVEGACIÓN ============
   
@@ -294,9 +301,33 @@ function Biblioteca({ userData, onLogout }) {
     }
   };
 
+  // Detectar cambios de tamaño de pantalla para ajustar columnas
+  useEffect(() => {
+    const detectarColumnas = () => {
+      const width = window.innerWidth;
+      let cols = 3; // Default
+      
+      if (width >= 1600) cols = 4;      // Ultra-wide
+      else if (width >= 1200) cols = 3; // Large
+      else if (width >= 1025) cols = 3; // Medium-large
+      else if (width > 768) cols = 2;   // Tablet landscape
+      else cols = 2;                    // Mobile
+      
+      if (cols !== columnasVisibles) {
+        setColumnasVisibles(cols);
+      }
+    };
+
+    detectarColumnas();
+    window.addEventListener('resize', detectarColumnas);
+    return () => window.removeEventListener('resize', detectarColumnas);
+  }, [columnasVisibles]);
+
   console.log('Estado actual:', {
     libros: libros.length,
     portadas: portadas.length,
+    columnasVisibles,
+    librosPorPagina,
     paginaActual,
     paginationInfo,
     cargandoPortadas
@@ -424,9 +455,10 @@ function Biblioteca({ userData, onLogout }) {
           {!cargandoPortadas && portadas.length > 0 && portadas.map((libro, index) => {
             const duration = 4 + (index % 3);
             const delay = (index % 3) * 0.15;
-            const esGridInferior = index >= 3; // Últimos 3 elementos (índices 3, 4, 5)
-            const papaloteIndex = index - 3; // 0, 1, 2 para los 3 inferiores
-            const backgroundImage = esGridInferior && papalotesAleatorios[papaloteIndex]
+            // La última fila son papalotes: últimos 'columnasVisibles' elementos
+            const esUltimaFila = index >= columnasVisibles;
+            const papaloteIndex = index - columnasVisibles; // Índice en la fila de papalotes
+            const backgroundImage = esUltimaFila && papalotesAleatorios[papaloteIndex]
               ? `url(${papalotesAleatorios[papaloteIndex]})`
               : `url(${nubeBlanca})`;
             
@@ -451,7 +483,7 @@ function Biblioteca({ userData, onLogout }) {
                     <div className="Error-libro">Sin portada</div>
                   )}
                 </div>
-                <h3 className={`Titulo-libro ${esGridInferior ? 'titulo-papalote' : ''}`}>{libro.titulo}</h3>
+                <h3 className={`Titulo-libro ${esUltimaFila ? 'titulo-papalote' : ''}`}>{libro.titulo}</h3>
               </div>
             );
           })}
