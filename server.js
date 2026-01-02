@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 const multer = require('multer');
-const WebSocket = require('ws');
+// const WebSocket = require('ws'); // Gazepoint ahora manejado desde Python
 const net = require('net');
 const http = require('http');
 const crypto = require('crypto');
@@ -1242,121 +1242,9 @@ try {
 }
 
 // ============ GAZEPOINT CONFIG ============
-const GP_HOST = process.env.GAZEPOINT_HOST || '192.168.56.1';
-const GP_PORT = parseInt(process.env.GAZEPOINT_PORT || '4242', 10);
-
-let gazepointClient = null;
-let reconnectTimer = null;
-let reconnectAttempts = 0;
-let maxReconnectAttempts = 3; // LIMITAR a 3 intentos
-let gazepointConnectionRequested = false; // Solo conectar cuando se necesite
-let currentRecordingPath = null;
-let currentRecordingFolder = null;
-let currentSessionId = null; // Agregar sessionId
-let txtStream = null;
-let gazepointStream = null;
-let headerWritten = false;
-
-function writeCsvHeaderIfNeeded() {
-  if (txtStream && !headerWritten) {
-    txtStream.write('LFPOGX,LFPOGY,RFPOGX,RFPOGY,timestamp\n');
-    headerWritten = true;
-  }
-}
-
-function connectToGazepoint(forceConnect = false) {
-  // Si no se ha solicitado explícitamente la conexión y no es forzada, salir
-  if (!gazepointConnectionRequested && !forceConnect) {
-    console.log('[gazepoint] Conexión no requerida, omitiendo...');
-    return;
-  }
-
-  if (gazepointClient) {
-    try { gazepointClient.destroy(); } catch (_) {}
-    gazepointClient = null;
-  }
-
-  const socket = new net.Socket();
-  gazepointClient = socket;
-
-  socket.connect(GP_PORT, GP_HOST, () => {
-    reconnectAttempts = 0;
-    console.log(`[gazepoint] Conectado a ${GP_HOST}:${GP_PORT}`);
-    socket.write('<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n');
-    socket.write('<SET ID="ENABLE_SEND_POG_FIX" STATE="1" />\r\n');
-    socket.write('<SET ID="ENABLE_SEND_TIME" STATE="1" />\r\n');
-    socket.write('<SET ID="ENABLE_SEND_PUPILDATA" STATE="1" />\r\n');
-  });
-
-  socket.on('data', (data) => {
-    const xmlData = data.toString();
-    const eyeData = parseGazepointData(xmlData);
-
-    if (eyeData) {
-      const payload = JSON.stringify({ type: 'GAZEPOINT_DATA', ...eyeData, ts: Date.now() });
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          try { client.send(payload); } catch (_) {}
-        }
-      });
-    }
-
-    if (currentRecordingPath && txtStream && gazepointStream && eyeData) {
-      writeCsvHeaderIfNeeded();
-      const { leftEye, rightEye } = eyeData;
-      txtStream.write(`${Number(leftEye.x)},${Number(leftEye.y)},${Number(rightEye.x)},${Number(rightEye.y)},${new Date().toISOString()}\n`);
-      gazepointStream.write(xmlData);
-    }
-  });
-
-  function scheduleReconnect(reason) {
-    if (reconnectTimer) return;
-    
-    // LIMITAR intentos de reconexión
-    if (reconnectAttempts >= maxReconnectAttempts) {
-      console.warn(`[gazepoint] Máximo de ${maxReconnectAttempts} intentos alcanzado. Deteniendo reconexiones automáticas.`);
-      console.warn(`[gazepoint] Para reconectar, active la grabación o subrayado ocular.`);
-      gazepointConnectionRequested = false; // Resetear flag
-      return;
-    }
-
-    const delay = Math.min(30000, 1000 * Math.pow(2, reconnectAttempts++));
-    console.warn(`[gazepoint] desconectado (${reason}). Intento ${reconnectAttempts}/${maxReconnectAttempts} en ${Math.round(delay/1000)}s...`);
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      connectToGazepoint();
-    }, delay);
-  }
-
-  socket.on('error', (err) => {
-    console.error('[gazepoint] error de socket:', err.message);
-    scheduleReconnect('error');
-  });
-
-  socket.on('close', () => {
-    scheduleReconnect('close');
-  });
-}
-
-function parseGazepointData(xmlData) {
-  try {
-    const lfx = (() => { const m = xmlData.match(/LFPOGX="([^"]+)"/); return m ? parseFloat(m[1]) : NaN; })();
-    const lfy = (() => { const m = xmlData.match(/LFPOGY="([^"]+)"/); return m ? parseFloat(m[1]) : NaN; })();
-    const rfx = (() => { const m = xmlData.match(/RFPOGX="([^"]+)"/); return m ? parseFloat(m[1]) : NaN; })();
-    const rfy = (() => { const m = xmlData.match(/RFPOGY="([^"]+)"/); return m ? parseFloat(m[1]) : NaN; })();
-    if ([lfx, lfy, rfx, rfy].some((v) => Number.isNaN(v))) return null;
-    return { leftEye: { x: lfx, y: lfy }, rightEye: { x: rfx, y: rfy } };
-  } catch (_) {
-    return null;
-  }
-}
-
-// Función para solicitar conexión a Gazepoint cuando sea necesario
-function requestGazepointConnection() {
-  gazepointConnectionRequested = true;
-  reconnectAttempts = 0; // Resetear intentos
-  connectToGazepoint(true); // Forzar conexión
-}
+// Gazepoint ahora se maneja desde un servicio Python separado
+// El frontend solo muestra indicadores visuales de estado de conexión
+// Los datos se capturan en el backend Python y se envían vía API REST
 
 // ============ CREAR SERVIDOR HTTP ============
 const server = http.createServer(app);
@@ -1394,76 +1282,9 @@ server.on('connection', (socket) => {
 });
 
 // ============ WEBSOCKET ============
-const wss = new WebSocket.Server({ server });
-
-wss.on('connection', (ws) => {
-  console.log('Cliente web conectado al WS');
-  // NO conectar automáticamente a Gazepoint, solo cuando se necesite
-
-  // Manejar errores de WebSocket
-  ws.on('error', (err) => {
-    // Ignorar errores de conexión normal (ECONNRESET, etc)
-    if (err.code === 'ECONNRESET' || err.code === 'EPIPE') {
-      // Estos errores son normales cuando el cliente se desconecta abruptamente
-      return;
-    }
-    console.error('Error en WebSocket:', err.message);
-  });
-
-  ws.on('message', (message) => {
-    try {
-      const data = JSON.parse(message);
-
-      if (data.type === 'START_RECORDING') {
-        // SOLICITAR conexión a Gazepoint cuando inicia grabación
-        requestGazepointConnection();
-        
-        // Usar el sessionId proporcionado o generar uno nuevo
-        const sessionId = data.sessionId || new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
-        const recordingFolderName = sessionId.replace('Z', ''); // Limpiar si viene con Z
-        const recordingFolder = path.join(recordingsDir, recordingFolderName);
-        
-        try {
-          fs.mkdirSync(recordingFolder, { recursive: true });
-        } catch (e) {
-          console.error('Error creando carpeta de grabación:', e);
-        }
-        
-        currentRecordingPath = path.join(recordingFolder, 'data');
-        currentRecordingFolder = recordingFolder;
-        currentSessionId = sessionId; // Guardar el sessionId
-        headerWritten = false;
-        txtStream = fs.createWriteStream(`${currentRecordingPath}.rtf`);
-        gazepointStream = fs.createWriteStream(`${currentRecordingPath}.gp3`);
-
-        const isoTimestamp = new Date().toISOString();
-        txtStream.write(`# Eye tracking recording\n# started_at=${isoTimestamp}\n# host=${GP_HOST}\n# port=${GP_PORT}\n`);
-        gazepointStream.write(`Recording started at: ${isoTimestamp}\n`);
-        console.log(`[gazepoint] Grabación iniciada en: ${recordingFolder} para sesión: ${sessionId}`);
-
-      } else if (data.type === 'ENABLE_GAZE_TRACKING') {
-        // SOLICITAR conexión cuando se activa subrayado ocular
-        requestGazepointConnection();
-      } else if (data.type === 'STOP_RECORDING') {
-        if (txtStream) { try { txtStream.end(); } catch(_) {} txtStream = null; }
-        if (gazepointStream) { try { gazepointStream.end(); } catch(_) {} gazepointStream = null; }
-        console.log(`[gazepoint] Grabación finalizada para sesión:`, currentSessionId);
-        currentRecordingPath = null;
-        currentRecordingFolder = null;
-        currentSessionId = null; // Limpiar también el sessionId
-        headerWritten = false;
-      }
-    } catch (e) {
-      console.error('Error processing message:', e);
-    }
-  });
-
-  ws.on('close', () => {
-    console.log('Cliente web desconectado');
-  });
-});
-
-console.log(`[gazepoint] WS en puerto integrado. Objetivo: ${GP_HOST}:${GP_PORT}`);
+// WebSocket desactivado - Gazepoint ahora manejado desde Python
+// El frontend mostrará indicadores visuales de conexión
+// Los datos se enviarán vía API REST desde el servicio Python
 
 // ============ CORS ============
 app.use(cors({

@@ -14,7 +14,7 @@ Sistema completo que integra:
 - ✅ **Lector avanzado** con persistencia de progreso, preferencias personalizadas y marcadores
 - ✅ **Sistema de experimentos jerárquico** (Experimento → Bloques → Estímulos → Datos)
 - ✅ **Modo experimento** con timer automático, SPACEBAR global, transiciones entre bloques
-- ✅ **Captura de datos** (eye-tracking Gazepoint, cámara web, progreso de lectura, timestamps)
+- ✅ **Captura de datos** (eye-tracking Gazepoint desde Python, cámara web, progreso de lectura, timestamps)
 - ✅ **Visualización de resultados** fullscreen con detalles de ejecución
 - ✅ **Seguridad en capas** (JWT, bcrypt, validaciones, parametrized queries, rate limiting)
 - ✅ **Responsivo** (desktop, tablet, mobile)
@@ -66,7 +66,7 @@ npm start  # Backend + Frontend en puerto 3000
 
 - Frontend: http://localhost:3000
 - API: http://localhost:3000/api
-- WebSocket (Gazepoint): ws://localhost:3000
+- Python Gazepoint Service: http://localhost:5000 (próximamente)
 
 **Credenciales de prueba:**
 - Usuario: `esau`
@@ -208,8 +208,8 @@ GET    /api/user-preferences      Cargar preferencias
 - 📍 Carga página inicial configurada automáticamente
 - 💾 Guarda automáticamente progreso durante bloque
 - 🎥 Captura de cámara web (si está habilitada)
-- 👁️ Eye-tracking con Gazepoint (WebSocket en tiempo real)
-- 🔴 Indicador visual de conexión eye-tracker
+- 👁️ **Eye-tracking con Gazepoint** (manejado desde servicio Python separado)
+- 🔴 Indicador visual de estado eye-tracker
 - 📊 Al terminar: llama `onBlockComplete()` y muestra pantalla de confirmación
 
 **Datos capturados:**
@@ -217,7 +217,7 @@ GET    /api/user-preferences      Cargar preferencias
 - Página inicial y final
 - Duración real vs configurada
 - Eventos de tecla (SPACEBAR)
-- Datos de eye-tracking (si disponible)
+- Datos de eye-tracking (enviados desde servicio Python vía API REST)
 - Video captura (si habilitada)
 
 **Endpoints:**
@@ -230,7 +230,39 @@ GET    /api/libros/portada/:id    Extraer portada EPUB
 
 ---
 
-## ⚙️ CONFIGURACIÓN DE EXPERIMENTOS
+## 👁️ INTEGRACIÓN EYE-TRACKING (GAZEPOINT)
+
+### Arquitectura
+El sistema de eye-tracking se maneja desde un **servicio Python separado** que:
+1. Se conecta directamente al dispositivo Gazepoint (puerto TCP 4242)
+2. Captura datos de seguimiento ocular en tiempo real
+3. Envía datos al backend Node.js vía API REST (`POST /api/experiment-data`)
+4. El frontend muestra indicador visual de estado de conexión
+
+### Ventajas de este enfoque
+- ✅ Desacoplamiento: Node.js no depende de conexión Gazepoint
+- ✅ Escalabilidad: Múltiples instancias del lector sin conflictos
+- ✅ Robustez: Fallos de eye-tracker no afectan la aplicación principal
+- ✅ Flexibilidad: Fácil integración con otros eye-trackers
+
+### Configuración Python (próximamente)
+```bash
+cd gazepoint-service/
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python gazepoint_service.py
+```
+
+### Variables de entorno (Python)
+```
+GAZEPOINT_HOST=192.168.56.1
+GAZEPOINT_PORT=4242
+API_ENDPOINT=http://localhost:3000/api
+API_TOKEN=jwt-token
+```
+
+---
 
 ### Componente `ConfigurarExperimentos.js` (829 líneas)
 

@@ -277,10 +277,8 @@ const ExperimentRunner = ({ experiment, userData, onClose, onExperimentComplete 
             setShowBlockIntro(true);
             setTimeout(() => {
               setShowBlockIntro(false);
-              if (bookChanged) {
-                // Si cambió de libro, mostrar Lector. Si es el mismo, ya está abierto
-                setShowLector(true);
-              }
+              // Mostrar Lector para el nuevo bloque
+              setShowLector(true);
               console.log('[ExperimentRunner] showLector = true, iniciando lectura');
             }, 3000);
           } else {
@@ -306,8 +304,6 @@ const ExperimentRunner = ({ experiment, userData, onClose, onExperimentComplete 
       handleBlockComplete(runBlockId);
     }, duration);
   };
-
-  const [showFinalScreen, setShowFinalScreen] = useState(false);
 
   const handleBlockComplete = async (runBlockId) => {
     console.log('[ExperimentRunner] ====== handleBlockComplete INICIADO ======');

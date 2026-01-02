@@ -7,16 +7,14 @@
  * - Ajustes de texto (fuente, tamaño, espaciado)
  * - Temas de color (claro, sepia, oscuro)
  * - Grabación de sesión con cámara
- * - Integración con Gazepoint para seguimiento ocular
  * - Sistema de bloques de lectura (5 bloques de 5 minutos)
  * - Índice navegable con búsqueda
+ * - Indicador visual de conexión eye-tracking (manejado desde Python)
  */
 
 import React, { useEffect, useRef, useState } from 'react';
 import ePub from 'epubjs';
 import './lector.css';
-import { useGazepoint } from './hooks/useGazepoint';
-import { useGazeHighlight } from './hooks/useGazeHighlight';
 
 // ============ CONSTANTES ============
 const PROGRESS_SAVE_DEBOUNCE_MS = 2000; // Esperar 2 segundos antes de guardar progreso
@@ -93,10 +91,9 @@ export default function Lector(props) {
     }
   );
 
-  // ============ HOOKS PERSONALIZADOS ============
-  const { startRecording: startGaze, stopRecording: stopGaze, isConnected: gazeConnected } = useGazepoint();
-  // Eye tracking highlight disabled for simplified interface
-  // useGazeHighlight(viewerRef, enableGazeHighlight && gazeConnected);
+  // ============ ESTADO DE EYE-TRACKING ============
+  // Eye-tracking ahora manejado desde Python - solo mostramos indicador visual
+  const [gazeConnected, setGazeConnected] = useState(false);
 
   // ============ FUNCIÓN PARA GUARDAR PROGRESO ============
   /**
