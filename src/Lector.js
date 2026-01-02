@@ -26,7 +26,18 @@ const RETRY_MAX_ATTEMPTS = 2; // Número máximo de reintentos para guardar prog
 const RETRY_BASE_DELAY_MS = 500; // Retraso base para reintentos con backoff exponencial
 
 export default function Lector(props) {
-  const { archivo, onClose, initialPreferences } = props;
+  const { 
+    archivo, 
+    onClose, 
+    initialPreferences,
+    // Props para modo experimento
+    experimentMode = false,
+    blockDuration = 300,
+    onBlockComplete,
+    onDataCapture,
+    bookId,
+    initialPage = 1
+  } = props;
   
   // ============ REFERENCIAS ============
   const viewerRef = useRef(null);
@@ -48,19 +59,15 @@ export default function Lector(props) {
   const [progress, setProgress] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [sliderValue, setSliderValue] = useState(1); // Para que el slider responda al usuario inmediatamente
   const [bookTitle, setBookTitle] = useState('Cargando...');
   const [bookIndex, setBookIndex] = useState([]);
   
   // ============ ESTADOS DE UI ============
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsTab, setSettingsTab] = useState('texto');
   const [showIndexModal, setShowIndexModal] = useState(false);
   const [indexSearch, setIndexSearch] = useState('');
-  
-  // ============ ESTADOS DE GRABACIÓN ============
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [enableGazeHighlight, setEnableGazeHighlight] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [activeTab, setActiveTab] = useState('text'); // 'text', 'theme', 'recording'
   
   // ============ ESTADOS DE BLOQUES DE LECTURA ============
   const [showBlockModal, setShowBlockModal] = useState(false);
@@ -68,6 +75,12 @@ export default function Lector(props) {
   const [blockTimer, setBlockTimer] = useState(0);
   const [isBlockActive, setIsBlockActive] = useState(false);
   const [blockTimerPosition, setBlockTimerPosition] = useState('center');
+  
+  // Estado para cronómetro en modo experimento
+  const [experimentTimer, setExperimentTimer] = useState(0);
+  const [timerStarted, setTimerStarted] = useState(false);
+  const experimentTimerRef = useRef(null);
+  const experimentTimeoutRef = useRef(null);
   
   // ============ PREFERENCIAS DE LECTURA ============
   const [prefs, setPrefs] = useState(
@@ -82,7 +95,8 @@ export default function Lector(props) {
 
   // ============ HOOKS PERSONALIZADOS ============
   const { startRecording: startGaze, stopRecording: stopGaze, isConnected: gazeConnected } = useGazepoint();
-  useGazeHighlight(viewerRef, enableGazeHighlight && gazeConnected);
+  // Eye tracking highlight disabled for simplified interface
+  // useGazeHighlight(viewerRef, enableGazeHighlight && gazeConnected);
 
   // ============ FUNCIÓN PARA GUARDAR PROGRESO ============
   /**
@@ -91,17 +105,33 @@ export default function Lector(props) {
    * @param {number} retryCount - Número de intentos realizados (por defecto 0)
    * @returns {Promise<void>}
    */
-  const saveReadingProgress = React.useCallback(async (retryCount = 0) => {
+  // ============ FUNCIÓN PARA GUARDAR PROGRESO ============
+  /**
+   * Guarda el progreso de lectura actual en el servidor y localStorage como backup
+   * @param {number} retryCount - Número de intentos realizados (por defecto 0)
+   * @returns {Promise<void>}
+   */
+  const saveReadingProgress = React.useCallback(async (progressToSave, retryCount = 0) => {
     const token = localStorage.getItem('authToken');
-    if (!token || !archivo) return;
+    if (!token || !archivo) {
+      console.warn('[lector] No se puede guardar: falta token o archivo');
+      return;
+    }
 
     try {
+      // Usar valores pasados como parámetros o del state
+      const currentPageVal = progressToSave?.currentPage || currentPage;
+      const totalPagesVal = progressToSave?.totalPages || totalPages;
+      const progressVal = progressToSave?.progress || progress;
+
       const progressData = {
         bookFile: archivo,
-        currentPage,
-        totalPages,
-        progress
+        currentPage: currentPageVal,
+        totalPages: totalPagesVal,
+        progress: progressVal
       };
+
+      console.log('[lector] 💾 Guardando progreso:', { currentPage: currentPageVal, totalPages: totalPagesVal, progress: progressVal.toFixed(1) + '%' });
 
       const response = await fetch('/api/reading-progress', {
         method: 'POST',
@@ -113,30 +143,21 @@ export default function Lector(props) {
       });
 
       if (response.ok) {
-        console.log('[lector] Progreso guardado:', { currentPage, totalPages, progress });
-        // Guardar en localStorage como backup (incluir porcentaje)
-        localStorage.setItem(`progress_${archivo}`, JSON.stringify({
-          currentPage,
-          totalPages,
-          progress // El porcentaje es lo más importante
-        }));
+        console.log('[lector] ✅ Progreso guardado en servidor');
+        localStorage.setItem(`progress_${archivo}`, JSON.stringify(progressData));
       } else if (response.status === 401) {
-        console.warn('[lector] Sesión expirada al guardar progreso');
-        // Guardar en localStorage como backup
+        console.warn('[lector] Sesión expirada');
         localStorage.setItem(`progress_${archivo}`, JSON.stringify(progressData));
       } else if (retryCount < RETRY_MAX_ATTEMPTS) {
-        // Reintentar hasta N veces si falla, con backoff exponencial
-        console.warn('[lector] Error guardando progreso, reintentando...');
+        console.warn('[lector] ⚠️ Error (status', response.status + '), reintentando...');
         const delay = RETRY_BASE_DELAY_MS * Math.pow(2, retryCount);
-        setTimeout(() => saveReadingProgress(retryCount + 1), delay);
+        setTimeout(() => saveReadingProgress(progressToSave, retryCount + 1), delay);
       } else {
-        console.error('[lector] Error guardando progreso después de reintentos');
-        // Guardar en localStorage como backup
+        console.error('[lector] ❌ Error después de reintentos');
         localStorage.setItem(`progress_${archivo}`, JSON.stringify(progressData));
       }
     } catch (err) {
-      console.error('[lector] Error en saveReadingProgress:', err);
-      // Guardar en localStorage como backup
+      console.error('[lector] ❌ Error en saveReadingProgress:', err);
       if (archivo) {
         localStorage.setItem(`progress_${archivo}`, JSON.stringify({
           bookFile: archivo,
@@ -168,83 +189,84 @@ export default function Lector(props) {
 
       if (response.ok) {
         const data = await response.json();
-        // Usar el porcentaje guardado (es más confiable que la página)
-        // Porque el porcentaje es independiente de cuántas páginas haya calculado
-        if (data.progress !== undefined && renditionRef.current && bookRef.current?.locations.length()) {
+        
+        // Si no hay progreso (0), simplemente no cargar nada (mostrar portada)
+        if (!data.progress || data.progress === 0) {
+          console.log('[lector] ℹ️ Sin progreso previo, mostrando portada');
+          return;
+        }
+        
+        // Usar el porcentaje guardado
+        if (data.progress > 0 && renditionRef.current && bookRef.current?.locations.length()) {
           try {
-            // Convertir porcentaje a CFI (Canonical Fragment Identifier)
             const percentage = data.progress / 100;
             const targetCfi = bookRef.current.locations.cfiFromPercentage(percentage);
             if (targetCfi) {
+              console.log('[lector] 📖 Cargando progreso:', (data.progress).toFixed(1), '%');
               await renditionRef.current.display(targetCfi);
-              console.log('[lector] Progreso cargado del servidor: ', (data.progress).toFixed(1), '%');
-              return; // Éxito
+              await new Promise(resolve => setTimeout(resolve, 300));
+              return;
             }
           } catch (err) {
-            console.error('[lector] Error al navegar al progreso guardado (vía porcentaje):', err);
+            console.error('[lector] Error cargando progreso:', err);
           }
         }
-        // Fallback: si no tiene progreso, intenta con currentPage (para compatibilidad con datos antiguos)
-        if (data.currentPage > 1 && renditionRef.current && bookRef.current?.locations.length()) {
-          try {
-            const percentage = (data.currentPage - 1) / (data.totalPages || 1);
-            const targetCfi = bookRef.current.locations.cfiFromPercentage(percentage);
-            if (targetCfi) {
-              await renditionRef.current.display(targetCfi);
-              console.log('[lector] Progreso cargado del servidor (fallback):', data.currentPage, '/', data.totalPages);
-              return; // Éxito
-            }
-          } catch (err) {
-            console.error('[lector] Error al navegar al progreso guardado (fallback):', err);
-          }
-        }
-      } else if (response.status === 404) {
-        console.log('[lector] No hay progreso guardado para este libro');
-      } else if (response.status === 401) {
-        console.warn('[lector] Sesión expirada al cargar progreso');
-      } else {
-        console.error('[lector] Error cargando progreso del servidor');
       }
     } catch (err) {
       console.error('[lector] Error en loadReadingProgress:', err);
     }
+  }, [archivo]);
 
-    // Intentar cargar desde localStorage como fallback
+  // ============ FUNCIÓN PARA CARGAR PÁGINA INICIAL (EXPERIMENTOS) ============
+  /**
+   * Carga una página específica (para modo experimento)
+   * Recibe el número de página y la carga usando spines
+   * Actualiza también el estado de currentPage
+   */
+  const loadInitialPage = React.useCallback(async (pageNum) => {
+    if (!bookRef.current || !renditionRef.current) {
+      console.log('[lector] Libro no listo, no se puede cargar página inicial');
+      return;
+    }
+
     try {
-      const localProgress = localStorage.getItem(`progress_${archivo}`);
-      if (localProgress && renditionRef.current && bookRef.current?.locations.length()) {
-        const data = JSON.parse(localProgress);
-        // Usar porcentaje si está disponible
-        if (data.progress !== undefined) {
-          const percentage = data.progress / 100;
-          try {
-            const targetCfi = bookRef.current.locations.cfiFromPercentage(percentage);
-            if (targetCfi) {
-              await renditionRef.current.display(targetCfi);
-              console.log('[lector] Progreso cargado de localStorage:', (data.progress).toFixed(1), '%');
-            }
-          } catch (err) {
-            console.error('[lector] Error al navegar al progreso de localStorage:', err);
-          }
-        }
-        // Fallback para datos antiguos
-        else if (data.currentPage > 1) {
-          const percentage = (data.currentPage - 1) / (data.totalPages || 1);
-          try {
-            const targetCfi = bookRef.current.locations.cfiFromPercentage(percentage);
-            if (targetCfi) {
-              await renditionRef.current.display(targetCfi);
-              console.log('[lector] Progreso cargado de localStorage (fallback):', data.currentPage, '/', data.totalPages);
-            }
-          } catch (err) {
-            console.error('[lector] Error al navegar al progreso de localStorage (fallback):', err);
-          }
+      if (!bookRef.current.locations.length()) {
+        console.log('[lector] Esperando localizaciones...');
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      if (bookRef.current.locations.length()) {
+        // Calcular totalPages basado en locations (igual que en ready hook)
+        const totalLocs = bookRef.current.locations.length();
+        const locationsPerPage = Math.max(1, Math.floor(totalLocs / MIN_PAGES_ESTIMATE));
+        const calculatedTotalPages = Math.max(1, Math.ceil(totalLocs / locationsPerPage));
+        
+        const percentage = Math.max(0, Math.min(1, (pageNum - 1) / calculatedTotalPages));
+        const cfi = bookRef.current.locations.cfiFromPercentage(percentage);
+        if (cfi) {
+          console.log('[lector] 📄 Cargando página inicial:', pageNum, 'de', calculatedTotalPages, 'CFI:', cfi);
+          await renditionRef.current.display(cfi);
+          await new Promise(resolve => setTimeout(resolve, 300));
+          // Actualizar los estados para que el contador refleje la página inicial
+          setCurrentPage(pageNum);
+          setSliderValue(pageNum);
+          setTotalPages(calculatedTotalPages);
+          const initialProgress = (pageNum / calculatedTotalPages) * 100;
+          setProgress(initialProgress);
+          console.log('[lector] 📊 Página actual:', pageNum, 'Progreso:', initialProgress.toFixed(1) + '%');
         }
       }
     } catch (err) {
-      console.error('[lector] Error procesando localStorage fallback:', err);
+      console.error('[lector] Error cargando página inicial:', err);
     }
-  }, [archivo]);
+  }, []);
+
+  // ============ FUNCIÓN PARA GUARDAR PROGRESO ============
+  /**
+   * Guarda el progreso de lectura actual en el servidor y localStorage como backup
+   * @param {number} retryCount - Número de intentos realizados (por defecto 0)
+   * @returns {Promise<void>}
+   */
 
   // ============ FUNCIONES DE APLICACIÓN DE ESTILOS ============
   
@@ -368,7 +390,11 @@ export default function Lector(props) {
   // Inicializar libro
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!archivo) return;
+    console.log('[Lector] useEffect de inicialización:', { archivo, experimentMode, bookId, initialPage });
+    if (!archivo) {
+      console.warn('[Lector] No hay archivo especificado');
+      return;
+    }
     let mounted = true;
     
     // Resetear estados de carga
@@ -379,6 +405,7 @@ export default function Lector(props) {
       try {
         // Construir URL válida para el libro
         const bookUrl = archivo.startsWith('http') ? archivo : `http://localhost:3000${archivo}`;
+        console.log('[Lector] Cargando libro desde:', bookUrl);
         const book = ePub(bookUrl);
         bookRef.current = book;
         await book.ready;
@@ -493,14 +520,6 @@ export default function Lector(props) {
         
         // Ocultar spinner de carga
         setIsLoading(false);
-        
-        // Cargar progreso guardado solo una vez
-        if (!progressLoadedRef.current) {
-          progressLoadedRef.current = true;
-          setTimeout(() => {
-            loadReadingProgress();
-          }, 500);
-        }
 
         // -------- EVENTOS DE RENDITION --------
         /**
@@ -512,48 +531,77 @@ export default function Lector(props) {
         rendition.on('relocated', (loc) => {
           // Si acabamos de aplicar preferencias, ignorar este evento
           if (skipNextRelocationRef.current) {
-            console.log('[lector] Ignorando relocated después de cambio de preferencias');
             return;
           }
           
-          if (!loc || !book.locations.length()) return;
-          
-          try {
-            const cfi = loc.start?.cfi || loc.cfi;
-            if (!cfi) return;
-            
-            // Obtener porcentaje del libro
-            const pct = book.locations.percentageFromCfi(cfi);
-            setProgress(pct * 100);
-            
-            // Calcular página usando los parámetros guardados
-            const { totalPages: totalPagesCalc } = pageCalcRef.current;
-            
-            // Página = (porcentaje * total de páginas)
-            const pageNum = Math.max(1, Math.ceil(pct * totalPagesCalc));
-            
-            setCurrentPage(pageNum);
-            console.log('[lector] Página:', pageNum, '/', totalPagesCalc, '- Porcentaje:', (pct * 100).toFixed(1), '%');
-            
-            // Guardar progreso con debounce para evitar saturar el servidor
-            // Limpia timeout anterior si existe
-            if (saveProgressTimeoutRef.current) {
-              clearTimeout(saveProgressTimeoutRef.current);
-            }
-            
-            // Guardar inmediatamente (sin esperar debounce) y luego nuevamente después del debounce
-            saveReadingProgress();
-            
-            // Debounce: guardar de nuevo después de 2 segundos si no hay más cambios
-            saveProgressTimeoutRef.current = setTimeout(() => {
-              saveReadingProgress();
-              saveProgressTimeoutRef.current = null;
-            }, PROGRESS_SAVE_DEBOUNCE_MS);
-          } catch (e) {
-            console.error('[lector] Error calculando página:', e);
+          if (!loc || !book.locations.length()) {
+            console.warn('[lector] ⚠️ relocated sin location o sin locations cargadas');
+            return;
           }
           
-          // Aplicar estilos cuando la página cambia
+          try {
+            // Obtener el CFI del libro actual
+            const cfi = loc.start?.cfi || loc.cfi;
+            if (!cfi) {
+              console.warn('[lector] ⚠️ relocated sin CFI válido');
+              return;
+            }
+            
+            console.log('[lector] 🔄 RELOCATED EVENT:', { cfi: cfi.substring(0, 30) });
+            
+            // Intentar obtener porcentaje de varias formas
+            let pct = 0;
+            
+            // Opción 1: percentageFromCfi (método estándar de epubjs)
+            pct = book.locations.percentageFromCfi(cfi);
+            console.log('[lector]   → percentageFromCfi():', (pct * 100).toFixed(1) + '%');
+            
+            // Si aún es 0, intentar calcular manualmente desde locations
+            if (pct === 0 && book.locations.length() > 0) {
+              // Buscar el CFI en el array de locations
+              const locArray = book.locations._locations || [];
+              const index = locArray.indexOf(cfi);
+              if (index >= 0) {
+                pct = index / locArray.length;
+                console.log('[lector]   → calculado manualmente:', (pct * 100).toFixed(1) + '%');
+              } else {
+                console.log('[lector]   ⚠️ CFI no encontrado en locations array');
+              }
+            }
+            
+            // Si aún es 0, no actualizar nada
+            if (pct === 0) {
+              console.warn('[lector] ⚠️ Porcentaje es 0, no se actualiza progreso');
+              return;
+            }
+            
+            // Actualizar progreso
+            const newProgress = Math.max(0, Math.min(100, pct * 100));
+            setProgress(newProgress);
+            
+            // Calcular página
+            const { totalPages: totalPagesCalc } = pageCalcRef.current;
+            const pageNum = Math.max(1, Math.ceil(pct * totalPagesCalc));
+            
+            console.log('[lector] ✅ ACTUALIZADO - Página:', pageNum, '/', totalPagesCalc, '- Progreso:', newProgress.toFixed(1) + '%');
+            
+            // Guardar progreso ANTES de actualizar el state
+            // Pasar los valores actuales explícitamente
+            saveReadingProgress({
+              currentPage: pageNum,
+              totalPages: totalPagesCalc,
+              progress: newProgress
+            });
+            
+            // Ahora actualizar el state
+            setCurrentPage(pageNum);
+            setSliderValue(pageNum);
+            setProgress(newProgress);
+          } catch (e) {
+            console.error('[lector] ❌ Error en relocated:', e);
+          }
+          
+          // Aplicar estilos
           setTimeout(() => applyPrefsToBook(), 100);
         });
 
@@ -562,6 +610,22 @@ export default function Lector(props) {
           console.log('[lector] Página renderizada');
           applyPrefsToBook();
         });
+
+        // Cargar progreso guardado después de que los eventos estén registrados
+        // En modo experimento, carga la página inicial especificada
+        // En modo lectura normal, carga el último progreso guardado
+        if (!progressLoadedRef.current) {
+          progressLoadedRef.current = true;
+          setTimeout(() => {
+            if (experimentMode && initialPage && initialPage > 1) {
+              console.log('[lector] Modo EXPERIMENTO: cargando página inicial', initialPage);
+              loadInitialPage(initialPage);
+            } else {
+              console.log('[lector] Modo LECTURA: cargando progreso guardado');
+              loadReadingProgress();
+            }
+          }, 500);
+        }
 
         setReady(true);
         console.log('[lector] Libro listo para lectura');
@@ -589,13 +653,15 @@ export default function Lector(props) {
   }, [archivo, applyPrefsToBook]);
 
   // Aplicar estilos cuando cambien las preferencias
-  // Recalcular totalPages cuando cambia fontSize porque afecta la paginación
-  // NO incluir applyPrefsToBook en las dependencias para evitar loops infinitos
-  // applyPrefsToBook muta dependiendo de prefs, así que incluirla causaría rerender infinito
+  // IMPORTANTE: NO recalcular totalPages cuando cambia fontSize/lineHeight
+  // Esto es como Google Play Libros: mantiene totalPages constante y usa porcentaje
+  // Los cambios visuales (fontSize, lineHeight, tema) NO afectan la paginación
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // applyPrefsToBook se define dentro del mismo scope y cambiarla causaría loops infinitos
   useEffect(() => {
     if (ready && renditionRef.current) {
       // Usar requestAnimationFrame para aplicar estilos sin disparar relocated
+      // Esto previene que relocated se active mientras cambiamos estilos
       requestAnimationFrame(() => {
         // Aplicar clase de tema al body para CSS tema completo
         document.body.classList.remove('light-theme', 'sepia-theme', 'dark-theme');
@@ -603,86 +669,17 @@ export default function Lector(props) {
           document.body.classList.add(`${prefs.theme}-theme`);
         }
         
+        // Aplicar preferencias de texto (fontSize, lineHeight, fuente)
+        // Esto solo afecta la visualización, NO la paginación
         applyPrefsToBook();
       });
       
-      // Recalcular totalPages cuando cambia fontSize
-      // fontSize afecta la paginación porque aumenta el tamaño del contenido
-      // Similar a Google Play Books que recalcula páginas dinámicamente
-      if (prefs.fontSize !== undefined) {
-        const timeoutId = setTimeout(() => {
-          const book = bookRef.current;
-          if (book && book.locations.length()) {
-            // Recalcular según el nuevo fontSize y lineHeight
-            // Aplicar factor de escala inverso al cálculo de páginas
-            const totalLocs = book.locations.length();
-            
-            // Factor por fontSize: 100% = 1.0, 137% = 1.37
-            const fontSizeRatio = prefs.fontSize / 100;
-            
-            // Factor por lineHeight: 1.45 (defecto) = 1.0
-            // Si aumenta lineHeight, menos contenido cabe (más páginas)
-            const lineHeightRatio = prefs.lineHeight / 1.45;
-            
-            // Factor combinado: mayor fontSize O lineHeight = menos contenido por página
-            const combinedRatio = fontSizeRatio * lineHeightRatio;
-            
-            // Cuanto mayor el factor combinado, menos contenido cabe por página
-            // Por lo tanto, más páginas totales
-            const scaledLocationsPerPage = Math.max(
-              1, 
-              Math.floor((totalLocs / MIN_PAGES_ESTIMATE) / combinedRatio)
-            );
-            const newTotalPages = Math.max(1, Math.ceil(totalLocs / scaledLocationsPerPage));
-            
-            // Actualizar ref con nuevos valores
-            pageCalcRef.current = { 
-              locationsPerPage: scaledLocationsPerPage, 
-              totalLocs, 
-              totalPages: newTotalPages,
-              fontSizeRatio,
-              lineHeightRatio
-            };
-            
-            // Mantener el porcentaje de progreso pero recalcular página actual
-            const currentPercentage = progress / 100;
-            const newCurrentPage = Math.max(1, Math.ceil(currentPercentage * newTotalPages));
-            
-            setTotalPages(newTotalPages);
-            setCurrentPage(newCurrentPage);
-            
-            console.log('[lector] Pages recalculadas por fontSize/lineHeight:', {
-              fontSize: prefs.fontSize + '%',
-              lineHeight: prefs.lineHeight,
-              combinedRatio: combinedRatio.toFixed(3),
-              scaledLocationsPerPage,
-              newTotalPages,
-              currentPercentage: (currentPercentage * 100).toFixed(1) + '%',
-              newCurrentPage
-            });
-          }
-        }, 300); // Esperar 300ms después del cambio de fontSize
-        
-        return () => clearTimeout(timeoutId);
-      }
+      // NOTA: No recalcular totalPages aquí
+      // La paginación se basa en locations (fijo) y porcentaje de progreso (variable)
+      // Cambiar fontSize solo afecta cuánto contenido se VE en pantalla,
+      // pero no cambia el totalPages ni deben ser necesarios relocated events adicionales
     }
-  }, [prefs, ready, progress]);
-
-  // Si Gazepoint se desconecta durante grabación, detener
-  useEffect(() => {
-    if (!gazeConnected && isRecording) {
-      console.warn('[lector] Gazepoint desconectado, deteniendo grabación');
-      stopRecording();
-    }
-  }, [gazeConnected, isRecording]);
-
-  // Si Gazepoint se desconecta, desactivar subrayado ocular
-  useEffect(() => {
-    if (!gazeConnected && enableGazeHighlight) {
-      console.warn('[lector] Gazepoint desconectado, desactivando subrayado ocular');
-      setEnableGazeHighlight(false);
-    }
-  }, [gazeConnected, enableGazeHighlight]);
+  }, [prefs, ready]);
 
   // Limpiar timer de bloques al desmontar componente
   useEffect(() => {
@@ -693,6 +690,147 @@ export default function Lector(props) {
       }
     };
   }, []);
+
+  // ============ MODO EXPERIMENTO ============
+  // Preparar cronómetro cuando se monta en modo experimento
+  useEffect(() => {
+    if (experimentMode && blockDuration) {
+      console.log(`[lector] MODO EXPERIMENTO: Preparando bloque de ${blockDuration}s (esperando ESPACIO)`);
+      setExperimentTimer(blockDuration);
+      setTimerStarted(false);
+    }
+    
+    return () => {
+      if (experimentTimerRef.current) {
+        clearInterval(experimentTimerRef.current);
+        experimentTimerRef.current = null;
+      }
+      if (experimentTimeoutRef.current) {
+        clearTimeout(experimentTimeoutRef.current);
+        experimentTimeoutRef.current = null;
+      }
+    };
+  }, [experimentMode, blockDuration]);
+
+  // Mantener refs para evitar listeners stale
+  const readyRef = useRef(false);
+  const timerStartedRef = useRef(false);
+  useEffect(() => { readyRef.current = ready; }, [ready]);
+  useEffect(() => { timerStartedRef.current = timerStarted; }, [timerStarted]);
+
+  // Listener para SPACEBAR en modo experimento - Global sin importar focus
+  useEffect(() => {
+    if (!experimentMode) return undefined;
+
+    const handleSpaceBar = (e) => {
+      if (e.code !== 'Space' && e.key !== ' ') return;
+      const started = timerStartedRef.current;
+      const isReady = readyRef.current;
+      console.log('[lector] SPACEBAR detectada - timerStarted:', started, 'ready:', isReady);
+      if (started || !isReady) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      console.log('[lector] SPACEBAR presionada - Iniciando cronómetro');
+      setTimerStarted(true);
+      timerStartedRef.current = true;
+      
+      // Capturar datos iniciales
+      if (onDataCapture) {
+        onDataCapture('block_start', {
+          blockDuration,
+          bookId,
+          initialPage,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Actualizar cronómetro cada segundo
+      experimentTimerRef.current = setInterval(() => {
+        setExperimentTimer(prev => {
+          if (prev <= 1) {
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      // Timer para completar bloque
+      const duration = blockDuration * 1000;
+      experimentTimeoutRef.current = setTimeout(() => {
+        console.log('[lector] MODO EXPERIMENTO: Bloque completado');
+        if (experimentTimerRef.current) {
+          clearInterval(experimentTimerRef.current);
+          experimentTimerRef.current = null;
+        }
+        if (onDataCapture) {
+          onDataCapture('block_end', {
+            timestamp: new Date().toISOString()
+          });
+        }
+        if (onBlockComplete) {
+          console.log('[lector] Llamando a onBlockComplete()');
+          onBlockComplete();
+        }
+      }, duration);
+    };
+
+    const cleanups = [];
+    
+    // Listeners en captura TRUE para asegurar que se ejecute primero
+    window.addEventListener('keydown', handleSpaceBar, true);
+    document.addEventListener('keydown', handleSpaceBar, true);
+    document.body.addEventListener('keydown', handleSpaceBar, true);
+    document.documentElement.addEventListener('keydown', handleSpaceBar, true);
+    
+    cleanups.push(() => window.removeEventListener('keydown', handleSpaceBar, true));
+    cleanups.push(() => document.removeEventListener('keydown', handleSpaceBar, true));
+    cleanups.push(() => document.body.removeEventListener('keydown', handleSpaceBar, true));
+    cleanups.push(() => document.documentElement.removeEventListener('keydown', handleSpaceBar, true));
+
+    // Intentar adjuntar a iframes de epub si es posible (pueden tener CORS)
+    const attachToContents = () => {
+      if (!renditionRef.current) return;
+      try {
+        if (renditionRef.current.getContents) {
+          const contents = renditionRef.current.getContents();
+          if (Array.isArray(contents)) {
+            contents.forEach(c => {
+              try {
+                if (c.document) {
+                  c.document.addEventListener('keydown', handleSpaceBar, true);
+                  cleanups.push(() => c.document?.removeEventListener('keydown', handleSpaceBar, true));
+                }
+                if (c.window) {
+                  c.window.addEventListener('keydown', handleSpaceBar, true);
+                  cleanups.push(() => c.window?.removeEventListener('keydown', handleSpaceBar, true));
+                }
+              } catch (_) {
+                // CORS error o contenido no accesible
+              }
+            });
+          }
+        }
+      } catch (_) {
+        // Silenciar errores de CORS
+      }
+    };
+
+    attachToContents();
+    
+    // Re-attach cuando se renderiza nuevo contenido del epub
+    try {
+      if (renditionRef.current?.on) {
+        renditionRef.current.on('rendered', attachToContents);
+        cleanups.push(() => renditionRef.current?.off?.('rendered', attachToContents));
+      }
+    } catch (_) {}
+
+    return () => {
+      cleanups.forEach(fn => { try { fn(); } catch (_) {} });
+    };
+  }, [experimentMode, blockDuration, onBlockComplete, onDataCapture, bookId, initialPage]);
 
   // ============ FUNCIONES DE NAVEGACIÓN ============
   
@@ -757,99 +895,6 @@ export default function Lector(props) {
     }
   };
 
-  // ============ FUNCIONES DE GRABACIÓN ============
-  
-  /**
-   * Inicia la grabación de video de la sesión de lectura
-   * Usa MediaRecorder API y sincroniza con el sistema Gazepoint
-   */
-  const startRecording = async () => {
-    try {
-      // Generar timestamp único para identificar esta sesión
-      const recordingTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      
-      // Solicitar acceso a la cámara
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      streamRef.current = stream;
-
-      // Configurar grabador de video
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-      // Guardar timestamp en el recorder para usarlo al terminar
-      mediaRecorderRef.current.recordingTimestamp = recordingTimestamp;
-
-      // Acumular fragmentos de video conforme se graban
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      // Al iniciar grabación: sincronizar con Gazepoint
-      mediaRecorder.onstart = () => {
-        startGaze(recordingTimestamp); // Iniciar eye-tracking con mismo timestamp
-        setIsRecording(true);
-        console.log('Grabación iniciada:', recordingTimestamp);
-      };
-
-      // Al detener grabación: subir video al servidor
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-        const sessionTimestamp = mediaRecorderRef.current.recordingTimestamp;
-        const fd = new FormData();
-        fd.append('video', blob, `${sessionTimestamp}.webm`);
-        fd.append('sessionId', sessionTimestamp); // ID de sesión para correlacionar con datos de Gazepoint
-        try {
-          await fetch('/api/upload', { method: 'POST', body: fd });
-          stopGaze(); // Detener eye-tracking
-        } catch (e) {
-          console.error('Error upload:', e);
-          stopGaze();
-        }
-        chunksRef.current = [];
-      };
-
-      mediaRecorder.start();
-      // No establecer isRecording aquí, se hace en onstart
-    } catch (e) {
-      console.error('Error recording:', e);
-    }
-  };
-
-  /**
-   * Detiene la grabación de video y cierra la cámara
-   */
-  const stopRecording = () => {
-    if (mediaRecorderRef.current?.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    // Liberar recursos de la cámara
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-    }
-    setIsRecording(false);
-    setIsPaused(false);
-  };
-
-  /**
-   * Pausa la grabación (sin detenerla completamente)
-   */
-  const pauseRecording = () => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.pause();
-      setIsPaused(true);
-    }
-  };
-
-  /**
-   * Resume una grabación pausada
-   */
-  const resumeRecording = () => {
-    if (mediaRecorderRef.current?.state === 'paused') {
-      mediaRecorderRef.current.resume();
-      setIsPaused(false);
-    }
-  };
-
   // ============ NAVEGACIÓN POR SLIDER ============
   
   /**
@@ -859,15 +904,23 @@ export default function Lector(props) {
    */
   const handleSliderChange = (e) => {
     const pageNum = parseInt(e.target.value, 10);
+    
+    // Actualizar inmediatamente el slider para feedback visual
+    setSliderValue(pageNum);
+    
     const book = bookRef.current;
     const rendition = renditionRef.current;
+    
     if (book && rendition && book.locations.length()) {
       // Calcular porcentaje basado en el número de página
       const { totalPages: totalPagesCalc } = pageCalcRef.current;
       const percentage = (pageNum - 1) / Math.max(1, totalPagesCalc - 1);
       const cfi = book.locations.cfiFromPercentage(percentage);
       if (cfi) {
-        rendition.display(cfi).catch(() => {});
+        // Navegar
+        rendition.display(cfi).catch((err) => {
+          console.error('[lector] Error en display():', err);
+        });
       }
     }
   };
@@ -983,252 +1036,64 @@ export default function Lector(props) {
   };
 
   return (
-    <div className="Lector-overlay" onClick={onClose}>
+    <div className="Lector-overlay" onClick={experimentMode ? undefined : onClose}>
       <div className="Lector-panel" onClick={(e) => e.stopPropagation()}>
-        {/* Barra de grabación flotante centrada en la parte superior */}
-        <div className="Recording-bar">
-          {/* Botón de subrayado por detección ocular */}
-          <button
-            className={`gaze-btn ${enableGazeHighlight ? 'active' : ''} ${!gazeConnected ? 'disabled' : ''}`}
-            onClick={() => gazeConnected && setEnableGazeHighlight(!enableGazeHighlight)}
-            disabled={!gazeConnected}
-            title={
-              !gazeConnected 
-                ? 'Gazepoint no conectado' 
-                : enableGazeHighlight 
-                  ? 'Desactivar subrayado ocular' 
-                  : 'Activar subrayado ocular'
-            }
-          >
-            👁️
-          </button>
-
-          {/* Botón de pausa/reanudar (solo visible durante grabación) */}
-          {isRecording && (
-            <button
-              className={`pause-btn ${isPaused ? 'active' : ''}`}
-              onClick={isPaused ? resumeRecording : pauseRecording}
-              title={isPaused ? 'Reanudar grabación' : 'Pausar grabación'}
-            >
-              {isPaused ? '▶' : '⏸'}
-            </button>
-          )}
-
-          {/* Botón de grabación */}
-          <button
-            className={`record-btn ${isRecording ? 'active' : ''} ${isPaused ? 'paused' : ''}`}
-            onClick={isRecording ? stopRecording : startRecording}
-            title={isRecording ? 'Detener grabación' : 'Iniciar grabación'}
-          >
-            {isRecording ? '⏹' : '●'}
-          </button>
-
-          {/* Botón de bloques de lectura */}
-          <button
-            className={`blocks-btn ${isBlockActive ? 'active' : ''}`}
-            onClick={() => setShowBlockModal(true)}
-            title="Iniciar bloques de lectura"
-          >
-            🧩
-          </button>
-        </div>
-
         <header className="Lector-header">
           <div className="Lector-title">📖 {bookTitle}</div>
           <div className="Lector-controls">
-            <button
-              className="HeaderBtn"
-              onClick={openIndex}
-              title="Índice del libro"
-            >
-              📑
-            </button>
-            <button
-              className="HeaderBtn"
-              onClick={() => setShowSettings(!showSettings)}
-              title="Configuración del lector"
-            >
-              Aa
-            </button>
-            
-            <button
-              className="HeaderBtn close"
-              onClick={onClose}
-              title="Cerrar"
-            >
-              ✕
-            </button>
-            
-            {/* Indicador de estado Gazepoint - al lado del botón cerrar */}
-            <div
-              className={`Gaze-indicator ${gazeConnected ? 'connected' : ''}`}
-              title={gazeConnected ? 'Gazepoint conectado' : 'Gazepoint desconectado'}
-            />
+            {!experimentMode && (
+              <>
+                <button
+                  className="HeaderBtn"
+                  onClick={openIndex}
+                  title="Índice del libro"
+                >
+                  📑
+                </button>
+                <button
+                  className="HeaderBtn"
+                  onClick={() => setShowSettings(!showSettings)}
+                  title="Ajustes de lectura"
+                >
+                  Aa
+                </button>
+                <button
+                  className="HeaderBtn close"
+                  onClick={onClose}
+                  title="Cerrar"
+                >
+                  ✕
+                </button>
+              </>
+            )}
           </div>
         </header>
-
-        {/* Popup de configuración */}
-        {showSettings && (
-          <div className="Settings-popover" onClick={(e) => e.stopPropagation()}>
-            {/* Tabs */}
-            <div className="Settings-tabs">
-              <button
-                className={`Settings-tab-btn ${settingsTab === 'texto' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('texto')}
-              >
-                Texto
-              </button>
-              <button
-                className={`Settings-tab-btn ${settingsTab === 'iluminacion' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('iluminacion')}
-              >
-                Iluminación
-              </button>
-              <button
-                className={`Settings-tab-btn ${settingsTab === 'seguimiento' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('seguimiento')}
-              >
-                Seguimiento
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="Settings-content">
-              {settingsTab === 'texto' && (
-                <>
-                  <div>
-                    <div className="Settings-section-title">FUENTE</div>
-                    <div className="Settings-font-buttons">
-                      {['original', 'sans', 'merri'].map((f) => (
-                        <button
-                          key={f}
-                          className={`Settings-font-btn ${prefs.font === f ? 'active' : ''}`}
-                          onClick={() => updatePref({ font: f })}
-                        >
-                          {f === 'original' ? 'Original' : f === 'sans' ? 'Sans' : 'Serif'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="Settings-section-title">
-                      TAMAÑO: {prefs.fontSize}%
-                    </div>
-                    <input
-                      type="range"
-                      min="70"
-                      max="160"
-                      value={prefs.fontSize}
-                      onChange={(e) => updatePref({ fontSize: Number(e.target.value) })}
-                      className="Settings-range-input"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="Settings-section-title">
-                      ESPACIADO: {Math.round(prefs.lineHeight * 100)}%
-                    </div>
-                    <input
-                      type="range"
-                      min="110"
-                      max="200"
-                      value={Math.round(prefs.lineHeight * 100)}
-                      onChange={(e) => updatePref({ lineHeight: Number(e.target.value) / 100 })}
-                      className="Settings-range-input"
-                    />
-                  </div>
-                </>
-              )}
-
-              {settingsTab === 'iluminacion' && (
-                <>
-                  <div>
-                    <div className="Settings-section-title">
-                      BRILLO: {Math.round(prefs.brightness * 100)}%
-                    </div>
-                    <input
-                      type="range"
-                      min="50"
-                      max="150"
-                      value={Math.round(prefs.brightness * 100)}
-                      onChange={(e) => updatePref({ brightness: Number(e.target.value) / 100 })}
-                      className="Settings-range-input"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="Settings-section-title">TEMA</div>
-                    <div className="Settings-theme-buttons">
-                      <button
-                        className={`Settings-theme-btn ${prefs.theme === 'light' ? 'active' : ''}`}
-                        onClick={() => updatePref({ theme: 'light' })}
-                        title="Claro"
-                        style={{ background: '#ffffff' }}
-                      />
-                      <button
-                        className={`Settings-theme-btn ${prefs.theme === 'sepia' ? 'active' : ''}`}
-                        onClick={() => updatePref({ theme: 'sepia' })}
-                        title="Sepia"
-                        style={{ background: '#f4ecd8' }}
-                      />
-                      <button
-                        className={`Settings-theme-btn ${prefs.theme === 'dark' ? 'active' : ''}`}
-                        onClick={() => updatePref({ theme: 'dark' })}
-                        title="Oscuro"
-                        style={{ background: '#0b0c0c' }}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {settingsTab === 'seguimiento' && (
-                <>
-                  <div>
-                    <div className="Settings-section-title">
-                      RESALTAR PALABRAS AL LEER
-                    </div>
-                    <button
-                      className={`Settings-toggle-btn ${enableGazeHighlight ? 'enabled' : ''}`}
-                      onClick={() => setEnableGazeHighlight(!enableGazeHighlight)}
-                    >
-                      {enableGazeHighlight ? '✓ Habilitado' : 'Deshabilitado'}
-                    </button>
-                    <p className="Settings-description">
-                      Resalta la palabra donde están enfocados tus ojos mientras lees. Requiere Gazepoint conectado.
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
 
         <main className="Lector-viewer">
           <div ref={viewerRef} style={{ width: '100%', height: '100%' }} />
           
           {/* Flechas laterales */}
-          <div className="NavArrows">
-            <button 
-              className={`NavArrow left visible ${isRecording ? 'disabled' : ''}`}
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                if (!isRecording) goPrev(); 
-              }}
-              disabled={isRecording}
-              title={isRecording ? 'No disponible durante grabación' : 'Página anterior'}
-            >
-              ◀
-            </button>
-            <button
-              className="NavArrow right visible"
-              onClick={(e) => { e.stopPropagation(); goNext(); }}
-              title="Página siguiente"
-            >
-              ▶
-            </button>
-          </div>
+          {!experimentMode && (
+            <div className="NavArrows">
+              <button 
+                className="NavArrow left visible"
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  goPrev(); 
+                }}
+                title="Página anterior"
+              >
+                ◀
+              </button>
+              <button
+                className="NavArrow right visible"
+                onClick={(e) => { e.stopPropagation(); goNext(); }}
+                title="Página siguiente"
+              >
+                ▶
+              </button>
+            </div>
+          )}
           
           {isLoading && <div className="Lector-loading">Cargando libro…</div>}
         </main>
@@ -1241,12 +1106,143 @@ export default function Lector(props) {
             type="range"
             min="1"
             max={totalPages || 1}
-            value={currentPage}
+            value={sliderValue}
             onChange={handleSliderChange}
             className="Lector-slider"
             aria-label="Ir a página"
           />
         </footer>
+
+        {/* Cronómetro visible en modo experimento */}
+        {experimentMode && (
+          <div className={`experiment-timer-overlay ${experimentTimer <= 30 && timerStarted ? 'warning' : ''}`}>
+            <div className="experiment-timer-display">
+              <span className="timer-icon">⏱️</span>
+              <span className="timer-value">{formatTime(experimentTimer)}</span>
+              {!timerStarted && (
+                <span className="timer-waiting">Presiona ESPACIO</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Panel de configuración */}
+        {showSettings && !experimentMode && (
+          <div className="Settings-popover">
+            <div className="Settings-tabs">
+              <button
+                className={`tab ${activeTab === 'text' ? 'active' : ''}`}
+                onClick={() => setActiveTab('text')}
+              >
+                Texto
+              </button>
+              <button
+                className={`tab ${activeTab === 'theme' ? 'active' : ''}`}
+                onClick={() => setActiveTab('theme')}
+              >
+                Iluminación
+              </button>
+              <button
+                className={`tab ${activeTab === 'navigation' ? 'active' : ''}`}
+                onClick={() => setActiveTab('navigation')}
+              >
+                Seguimiento
+              </button>
+            </div>
+            <div className="Settings-body">
+              {activeTab === 'text' && (
+                <div className="Settings-section">
+                  <label>FUENTE</label>
+                  <div style={{display:'flex', gap:'8px', marginBottom:'12px'}}>
+                    {['original', 'sans', 'serif'].map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setPrefs(prev => ({...prev, font: f}))}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          border: prefs.font === f ? '2px solid #5bd8cf' : '1px solid #444',
+                          background: prefs.font === f ? 'rgba(91, 216, 207, 0.2)' : 'transparent',
+                          color: '#e8f6f5',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {f === 'original' ? 'Original' : f === 'sans' ? 'Sans' : 'Serif'}
+                      </button>
+                    ))}
+                  </div>
+                  <label>TAMAÑO: {prefs.fontSize}%</label>
+                  <input
+                    type="range"
+                    min="80"
+                    max="200"
+                    value={prefs.fontSize}
+                    onChange={(e) => setPrefs(prev => ({...prev, fontSize: Number(e.target.value)}))}
+                    style={{width: '100%'}}
+                  />
+                  <label>ESPACIADO: {prefs.lineHeight.toFixed(2)}</label>
+                  <input
+                    type="range"
+                    min="1.2"
+                    max="2.5"
+                    step="0.05"
+                    value={prefs.lineHeight}
+                    onChange={(e) => setPrefs(prev => ({...prev, lineHeight: Number(e.target.value)}))}
+                    style={{width: '100%'}}
+                  />
+                </div>
+              )}
+              {activeTab === 'theme' && (
+                <div className="Settings-section">
+                  <label>TEMA</label>
+                  <div style={{display:'flex', gap:'8px', marginBottom:'12px'}}>
+                    {[{val:'light',lbl:'☀️ Claro'},{val:'sepia',lbl:'📜 Sepia'},{val:'dark',lbl:'🌙 Oscuro'}].map(({val,lbl}) => (
+                      <button
+                        key={val}
+                        onClick={() => setPrefs(prev => ({...prev, theme: val}))}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          border: prefs.theme === val ? '2px solid #5bd8cf' : '1px solid #444',
+                          background: prefs.theme === val ? 'rgba(91, 216, 207, 0.2)' : 'transparent',
+                          color: '#e8f6f5',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem'
+                        }}
+                      >
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
+                  <label>BRILLO: {(prefs.brightness * 100).toFixed(0)}%</label>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="1.5"
+                    step="0.05"
+                    value={prefs.brightness}
+                    onChange={(e) => setPrefs(prev => ({...prev, brightness: Number(e.target.value)}))}
+                    style={{width: '100%'}}
+                  />
+                </div>
+              )}
+              {activeTab === 'navigation' && (
+                <div className="Settings-section">
+                  <p style={{fontSize:'0.9rem', color:'#aaa', margin:0}}>
+                    Seguimiento de lectura y análisis de comportamiento.
+                  </p>
+                  <div style={{marginTop:'12px', padding:'12px', background:'rgba(91,216,207,0.1)', borderRadius:'6px'}}>
+                    <p style={{margin:0, fontSize:'0.85rem', color:'#5bd8cf'}}>
+                      ℹ️ Las funciones de seguimiento ocular y grabación están disponibles durante los experimentos configurados.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Modal de bloques de lectura */}
         {showBlockModal && (

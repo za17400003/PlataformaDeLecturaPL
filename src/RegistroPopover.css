@@ -189,3 +189,223 @@
     transform: rotate(360deg);
   }
 }
+/* Pantalla de Verificación de Email */
+.RegistroPopover-verification {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 0;
+}
+
+.verification-icon {
+  width: 80px;
+  height: 80px;
+  background-color: #e8f5e9;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  color: #2e7d32;
+  animation: scaleIn 0.5s ease-out;
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.verification-message {
+  color: #00a69d;
+  font-family: 'Comic Neue', cursive;
+  font-size: 1rem;
+  text-align: center;
+  margin: 0;
+}
+
+.verification-email {
+  color: #d946ef;
+  font-family: monospace;
+  font-size: 1.1rem;
+  font-weight: bold;
+  text-align: center;
+  margin: 0;
+  word-break: break-all;
+}
+
+.verification-instructions {
+  width: 100%;
+  background-color: #f0f9f8;
+  border-left: 4px solid #00a69d;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.verification-instructions h3 {
+  color: #00a69d;
+  font-family: 'Comic Neue', cursive;
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+}
+
+.verification-instructions ol {
+  color: #333;
+  font-family: 'Comic Neue', cursive;
+  margin: 0;
+  padding-left: 1.5rem;
+  line-height: 1.8;
+}
+
+.verification-instructions li {
+  margin: 0.5rem 0;
+}
+
+.verification-note {
+  background-color: #fff3cd;
+  border-left: 4px solid #ffc107;
+  padding: 0.75rem;
+  border-radius: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.verification-note p {
+  color: #856404;
+  font-family: 'Comic Neue', cursive;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Responsive Design */
+@media (max-width: 600px) {
+  .RegistroPopover-content {
+    max-width: 95vw;
+    padding: 1.5rem 1rem;
+    border-radius: 15px;
+  }
+
+  .RegistroPopover-title {
+    font-size: 1.3rem;
+    margin-bottom: 1.2rem;
+  }
+
+  .RegistroPopover-input {
+    font-size: 16px;
+    padding: 0.65rem;
+  }
+
+  .RegistroPopover-close {
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 28px;
+    height: 28px;
+    font-size: 1.3rem;
+  }
+
+  /* Pantalla de verificación responsiva */
+  .RegistroPopover-verification {
+    gap: 1.2rem;
+    padding: 0.75rem 0;
+  }
+
+  .verification-icon {
+    width: 70px;
+    height: 70px;
+    font-size: 2.5rem;
+  }
+
+  .verification-message {
+    font-size: 0.95rem;
+  }
+
+  .verification-email {
+    font-size: 0.95rem;
+    padding: 0 0.5rem;
+    word-break: break-word;
+  }
+
+  .verification-instructions {
+    padding: 0.85rem;
+    border-left-width: 3px;
+  }
+
+  .verification-instructions h3 {
+    font-size: 0.95rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .verification-instructions ol {
+    padding-left: 1.3rem;
+    line-height: 1.6;
+    font-size: 0.9rem;
+  }
+
+  .verification-instructions li {
+    margin: 0.4rem 0;
+  }
+
+  .verification-note {
+    padding: 0.65rem;
+  }
+
+  .verification-note p {
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+
+  .RegistroPopover-btn-crear {
+    padding: 0.65rem 1.2rem;
+    font-size: 0.95rem;
+    min-height: 38px;
+  }
+
+  .RegistroPopover-error,
+  .RegistroPopover-exito {
+    font-size: 0.85rem;
+    padding: 0.65rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .RegistroPopover-content {
+    max-width: 100vw;
+    padding: 1rem 0.75rem;
+    border-radius: 12px;
+  }
+
+  .RegistroPopover-title {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+
+  .verification-icon {
+    width: 60px;
+    height: 60px;
+    font-size: 2rem;
+  }
+
+  .verification-message {
+    font-size: 0.9rem;
+  }
+
+  .verification-email {
+    font-size: 0.85rem;
+  }
+
+  .verification-instructions ol {
+    font-size: 0.85rem;
+  }
+
+  .RegistroPopover-input {
+    font-size: 16px;
+    padding: 0.6rem;
+  }
+}

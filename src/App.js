@@ -5,6 +5,7 @@ import solAnimado from './assets/sol.png';
 import pajaritos from './assets/pajaros.png';
 import Biblioteca from './biblioteca';
 import RegistroPopover from './RegistroPopover';
+import VerifyEmail from './VerifyEmail';
 
 function App() {
   const [usuario, setUsuario] = useState('');
@@ -19,14 +20,23 @@ function App() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [mostrarRegistro, setMostrarRegistro] = useState(false);
 
-  // Verificar si hay una sesión activa al cargar
+  // Efecto para verificar sesión y tokens
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    
+    // Si hay token de verificación en URL, cargar VerifyEmail
     if (token) {
-      // Verificar que la sesión sea válida
+      setCheckingSession(false);
+      return;
+    }
+    
+    // Verificar token guardado
+    const authToken = localStorage.getItem('authToken');
+    if (authToken) {
       fetch('http://localhost:3000/api/user', {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${authToken}`
         }
       })
         .then(res => res.json())
@@ -34,21 +44,25 @@ function App() {
           if (data.id) {
             setUserData(data);
             setLoginExitoso(true);
-            setCheckingSession(false);
           } else {
             localStorage.removeItem('authToken');
-            setCheckingSession(false);
           }
+          setCheckingSession(false);
         })
         .catch(() => {
           localStorage.removeItem('authToken');
           setCheckingSession(false);
         });
     } else {
-      // Si no hay token, mostrar pantalla de login
       setCheckingSession(false);
     }
   }, []);
+
+  // Si estamos en página de verificación de email, mostrar VerifyEmail
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('token')) {
+    return <VerifyEmail />;
+  }
 
   const iniciarSesion = async () => {
     setCargando(true);
@@ -78,12 +92,22 @@ function App() {
           setLoginExitoso(true);
         }, 1500); // espera a que termine la animación
       } else {
-        setError(true);
-        setMensajeBoton(data.error || 'usuario/contraseña no válido');
-        setTimeout(() => {
-          setError(false);
-          setMensajeBoton('Iniciar sesión');
-        }, 2000);
+        // Si la cuenta no está verificada
+        if (response.status === 403 && data.unverified) {
+          setError(true);
+          setMensajeBoton('Verifica tu correo antes de iniciar sesión');
+          setTimeout(() => {
+            setError(false);
+            setMensajeBoton('Iniciar sesión');
+          }, 3000);
+        } else {
+          setError(true);
+          setMensajeBoton(data.error || 'usuario/contraseña no válido');
+          setTimeout(() => {
+            setError(false);
+            setMensajeBoton('Iniciar sesión');
+          }, 2000);
+        }
       }
     } catch (error) {
       console.error('Error en login:', error);
@@ -159,6 +183,7 @@ function App() {
           className="Input"
           value={usuario}
           onChange={(e) => setUsuario(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && !cargando && iniciarSesion()}
         />
         <input
           type="password"
@@ -166,6 +191,7 @@ function App() {
           className="Input"
           value={contrasena}
           onChange={(e) => setContrasena(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && !cargando && iniciarSesion()}
         />
 
         <button

@@ -54,5 +54,27 @@ module.exports = {
     USERNAME_MAX_LENGTH: 50,
     PASSWORD_MIN_LENGTH: 3,
     PASSWORD_MAX_LENGTH: 100
+  },
+
+  // Configuración de email para verificación
+  EMAIL: {
+    // Usar Gmail o servidor SMTP
+    SERVICE: process.env.EMAIL_SERVICE || 'gmail',
+    USER: process.env.EMAIL_USER || 'tu-email@gmail.com',
+    PASSWORD: process.env.EMAIL_PASSWORD || 'tu-contraseña-app',
+    FROM: process.env.EMAIL_FROM || 'noreply@bibliotecadigital.com',
+    // Configuración SMTP para servidores como Ethereal
+    HOST: process.env.EMAIL_HOST || 'smtp.ethereal.email',
+    PORT: parseInt(process.env.EMAIL_PORT || '587'),
+    SECURE: process.env.EMAIL_SECURE === 'true' || false,
+    // URL base para los links de verificación
+    VERIFICATION_URL: process.env.VERIFICATION_URL || 'http://localhost:3000',
+    // Tiempo de expiración del token de verificación en horas
+    TOKEN_EXPIRATION_HOURS: 24
+  },
+
+  // Correos institucionales permitidos
+  INSTITUTIONAL_EMAILS: {
+    domains: ['@zapopan.tecmm.edu.mx', '@cicese.mx']
   }
 };

@@ -189,10 +189,10 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: 1rem 1rem 1rem 1rem; /* Reducir padding inferior */
-  min-height: 100vh;
-  max-height: 100vh; /* Evitar desborde vertical */
-  max-width: 100vw; /* Evitar overflow horizontal */
+  padding: 0.6rem 0.8rem 3rem 0.8rem; /* Más colchón inferior para la fila de abajo */
+  min-height: 100vh; /* Altura mínima pantalla, pero deja crecer si hay más contenido */
+  height: auto;
+  overflow-y: auto; /* Permitir scroll si se requiere */
   /* Fondo: 2/3 blanco, 1/3 azul */
   background: 
     linear-gradient(to bottom,
@@ -200,10 +200,10 @@ html, body {
       #FFFFFF 66.67%,  /* Blanco hasta 2/3 de altura */
       #4BA5E8 100%     /* Azul en el 1/3 inferior */
     );
+  background-attachment: fixed; /* Fondo fijo cuando hace scroll */
   font-family: 'Fredoka', 'Comic Neue', cursive;
   position: relative;
-  overflow-x: hidden; /* Asegurar no scroll horizontal */
-  overflow-y: hidden; /* Sin scroll vertical */
+  overflow-x: hidden; /* NO scroll horizontal */
   width: 100%;
   box-sizing: border-box;
 }
@@ -255,6 +255,70 @@ html, body {
   transform: translateY(0);
 }
 
+/* Botón de Configurar Experimentos */
+.Experiments-button {
+  position: fixed;
+  top: 1.5rem;
+  right: 5.5rem;
+  background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+  border: none;
+  border-radius: 50%;
+  width: 3rem;
+  height: 3rem;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
+}
+
+.Experiments-button:hover {
+  background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.45);
+}
+
+.Experiments-button svg {
+  color: white;
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.Experiments-button:active {
+  transform: translateY(-1px);
+}
+
+/* Popover de Experimentos - Separado 0.1rem hacia abajo */
+.ExperimentsPopover {
+  position: fixed;
+  top: calc(1.5rem + 3rem + 0.1rem);
+  right: 1.5rem;
+  background: white;
+  border: 2px solid #8B5CF6;
+  border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  z-index: 999;
+  animation: slideDownIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  font-family: 'Comic Neue', cursive, sans-serif;
+  max-width: 90vw;
+  width: 100%;
+  max-width: 500px;
+}
+
+@keyframes slideDownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes cloudSeaFloat {
   0%, 100% { 
     transform: translateX(0) translateY(0) scale(1); 
@@ -277,14 +341,14 @@ html, body {
 /* Título principal mejorado - Más cerca de los libros */
 .Titulo-biblioteca-container {
   text-align: center;
-  margin-bottom: 0.8rem; /* Reducir espacio para acercar libros */
+  margin-bottom: 0.4rem; /* Reducir espacio para acercar libros */
   margin-top: 0;         /* Sin espacio superior */
   position: relative;
   z-index: 2;
 }
 
 .Titulo-biblioteca {
-  font-size: 2.8rem;
+  font-size: 2.2rem;
   color: #6B73FF; /* Violeta suave */
   margin-bottom: 0;
   text-align: center;
@@ -323,7 +387,7 @@ html, body {
 
 @media (max-width: 768px) {
   .Biblioteca {
-    padding: 1rem 0.5rem;
+    padding: 1rem 0.5rem 5rem 0.5rem;
   }
   
   .Titulo-biblioteca {
@@ -333,6 +397,36 @@ html, body {
   
   .Titulo-nube {
     font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .Biblioteca {
+    padding: 0.75rem 0.5rem 5rem 0.5rem;
+  }
+  
+  .Titulo-biblioteca {
+    font-size: 1.5rem;
+    gap: 0.3rem;
+  }
+  
+  .Titulo-nube {
+    font-size: 1.2rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .Biblioteca {
+    padding: 0.5rem 0.25rem 4.5rem 0.25rem;
+  }
+  
+  .Titulo-biblioteca {
+    font-size: 1.2rem;
+    gap: 0.2rem;
+  }
+  
+  .Titulo-nube {
+    font-size: 1rem;
   }
 }
 
@@ -378,14 +472,14 @@ html, body {
   width: 100%;
   max-width: 100%;
   position: relative;
-  margin: 3rem auto 2rem auto; /* Aumentado top margin para dejar espacio al welcome */
-  padding: 0 1rem 1rem 1rem; /* Padding adaptativo */
+  margin: 0.5rem auto 0.6rem auto; /* Dar un colchón inferior para títulos */
+  padding: 0 1rem 0.6rem 1rem; /* Más espacio interno abajo */
 }
 
 /* Espaciador entre grids superior e inferior */
 .Grid-separator {
   width: 100%;
-  height: 2.5rem; /* Separación vertical generosa */
+  height: 1rem; /* Separación vertical más compacta */
   position: relative;
   z-index: 1;
 }
@@ -393,16 +487,16 @@ html, body {
 /* Grilla de libros: más cerca del título */
 .Nubes-blancas {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Flexible, responde al contenedor */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); /* Flexible, responde al contenedor */
   grid-auto-rows: auto;
-  gap: 1.5rem 1rem; /* Gap más eficiente (row gap, col gap) */
+  gap: 1.8rem 1.2rem; /* Separación igual a skeleton para que no se recorte */
   justify-items: center;
   align-items: start;
   width: 100%;
   max-width: 1400px; /* Control más estricto del ancho */
   position: relative;
   z-index: 1;
-  padding: 0.5rem 1rem 4rem 1rem; /* Padding simétrico y contenido */
+  padding: 0.3rem 0.6rem 6rem 0.6rem; /* Igual padding-bottom que skeleton para evitar cortes */
   margin: 0 auto; /* centrar la grilla */
   box-sizing: border-box;
   overflow: visible; /* Permitir que títulos sobresalgan */
@@ -412,8 +506,9 @@ html, body {
 @media (min-width: 1600px) {
   .Nubes-blancas {
     grid-template-columns: repeat(4, minmax(280px, 1fr)); /* 4 columnas en pantallas muy anchas */
-    gap: 2rem 1.5rem; /* Más gap en pantallas anchas */
+    gap: 1.8rem 1.5rem;
     max-width: 1400px; /* Expandir max-width */
+    padding: 0.5rem 1.5rem 6rem 1.5rem;
   }
 }
 
@@ -423,7 +518,7 @@ html, body {
     grid-template-columns: repeat(3, minmax(300px, 1fr));
     gap: 1.8rem 1.2rem;
     max-width: 1100px;
-    padding: 0.5rem 1.5rem 4rem 1.5rem;
+    padding: 0.5rem 1.5rem 6rem 1.5rem;
   }
 }
 
@@ -431,9 +526,9 @@ html, body {
 @media (min-width: 1025px) and (max-width: 1199px) {
   .Nubes-blancas {
     grid-template-columns: repeat(3, minmax(260px, 1fr));
-    gap: 1.4rem 1rem;
+    gap: 1.5rem 1rem;
     max-width: 900px;
-    padding: 0.5rem 1rem 4rem 1rem;
+    padding: 0.5rem 1rem 6rem 1rem;
   }
 }
 
@@ -441,9 +536,9 @@ html, body {
 @media (min-width: 768px) and (max-width: 1024px) {
   .Nubes-blancas {
     grid-template-columns: repeat(2, minmax(250px, 1fr));
-    gap: 1.2rem 0.8rem;
+    gap: 1.5rem 0.8rem;
     max-width: 600px;
-    padding: 0.5rem 1rem 4rem 1rem;
+    padding: 0.5rem 1rem 6rem 1rem;
   }
 }
 
@@ -451,9 +546,9 @@ html, body {
 @media (max-width: 767px) {
   .Nubes-blancas {
     grid-template-columns: repeat(2, minmax(200px, 1fr));
-    gap: 1rem 0.6rem;
+    gap: 1.2rem 0.6rem;
     max-width: 500px;
-    padding: 0.5rem 0.5rem 4rem 0.5rem;
+    padding: 0.5rem 0.5rem 6rem 0.5rem;
   }
 }
 
@@ -461,9 +556,9 @@ html, body {
 @media (min-width: 481px) and (max-width: 768px) {
   .Nubes-blancas {
     grid-template-columns: repeat(2, minmax(180px, 1fr));
-    gap: 1rem 0.8rem;
+    gap: 1.2rem 0.8rem;
     max-width: 95vw;
-    padding: 0.5rem 0.8rem 5rem 0.8rem;
+    padding: 0.5rem 0.8rem 6rem 0.8rem;
     box-sizing: border-box;
   }
 }
@@ -473,7 +568,7 @@ html, body {
   .Nubes-blancas {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
     padding: 0.5rem 0.6rem 6rem 0.6rem;
-    gap: 0.8rem 0.6rem;
+    gap: 1.2rem 0.6rem;
     max-width: 98vw;
     box-sizing: border-box;
   }
@@ -538,7 +633,7 @@ html, body {
 
 /* elevar segunda fila */
 .Libro-nube:nth-child(n + 4) {
-  margin-top: -1.5rem;
+  margin-top: -2rem;
 }
 
 /* Nube blanca flotante con animaciones individuales */
@@ -558,7 +653,7 @@ html, body {
   opacity: 0;
   animation: fadeInCloud 0.45s ease-out forwards, flotar var(--float-duration) ease-in-out infinite var(--float-delay);
   transition: transform 0.3s ease;
-  margin-bottom: -0.9rem;
+  margin-bottom: -2rem; /* Comprimir verticalmente más aún */
   position: relative;
 }
 
@@ -1076,7 +1171,7 @@ html, body {
 .Flechas-navegacion {
   /* colocar las dos flechas a los laterales, fuera del área activa del grid */
   position: absolute;
-  top: 40%; /* Ajustar posición vertical */
+  top: 35%; /* Subir para centrar relativo al grid superior */
   left: 0;
   right: 0;
   transform: translateY(-50%);
@@ -1089,15 +1184,15 @@ html, body {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 72px;
-  height: 72px;
+  width: 90px;
+  height: 90px;
   cursor: pointer;
   transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  background: rgba(255, 255, 255, 0.95); /* Fondo más sutil */
+  background: rgba(255, 255, 255, 0.12); /* Muy transparente */
   border-radius: 50%;
-  box-shadow: 0 3px 8px rgba(139, 157, 195, 0.15); /* Sombra más suave */
-  backdrop-filter: blur(8px); /* Efecto de cristal suave */
-  border: 1px solid rgba(139, 157, 195, 0.1);
+  box-shadow: 0 2px 6px rgba(139, 157, 195, 0.08); /* Sombra más sutil */
+  backdrop-filter: blur(3px); /* Efecto de cristal muy suave */
+  border: none;
   pointer-events: auto; /* solo las flechas reciben clicks */
   will-change: transform;
   display: flex;

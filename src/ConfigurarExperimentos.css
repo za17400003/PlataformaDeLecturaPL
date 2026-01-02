@@ -1,0 +1,682 @@
+/* ============ CONFIGURAR EXPERIMENTOS ============ */
+
+.configurar-experimentos {
+  padding: 20px;
+  max-height: 600px;
+  overflow-y: auto;
+  font-family: 'Comic Neue', cursive, sans-serif;
+}
+
+.configurar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 3px solid #FF6B6B;
+  padding-bottom: 10px;
+}
+
+.configurar-header h2 {
+  color: #FF6B6B;
+  font-size: 24px;
+  margin: 0;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #FF6B6B;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s;
+}
+
+.close-btn:hover {
+  transform: scale(1.2);
+}
+
+.experimentos-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.experimentos-list {
+  display: grid;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.experimento-card {
+  background: linear-gradient(135deg, #FFF9E6 0%, #FFEBCC 100%);
+  border: 2px solid #FFD700;
+  border-radius: 12px;
+  padding: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.experimento-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.experimento-info {
+  flex: 1;
+}
+
+.experimento-info h3 {
+  color: #FF6B6B;
+  margin: 0 0 5px 0;
+  font-size: 18px;
+}
+
+.exp-name {
+  color: #333;
+  font-weight: bold;
+  margin: 3px 0;
+  font-size: 16px;
+}
+
+.exp-desc {
+  color: #666;
+  font-size: 13px;
+  margin: 3px 0 0 0;
+}
+
+.experimento-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 15px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ============ CONFIGURAR EXPERIMENTO (BLOQUES) ============ */
+
+.configurar-experimento {
+  display: flex;
+  flex-direction: column;
+  height: 600px;
+  max-height: 600px;
+  overflow: hidden;
+  font-family: 'Comic Neue', cursive, sans-serif;
+  padding: 15px;
+}
+
+.exp-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  border-bottom: 3px solid #4CAF50;
+  padding-bottom: 10px;
+}
+
+.back-btn {
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+  border: none;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: 'Comic Neue', cursive, sans-serif;
+  transition: transform 0.2s;
+}
+
+.back-btn:hover {
+  transform: translateX(-2px);
+}
+
+.configurar-experimento h2 {
+  color: #4CAF50;
+  margin: 0;
+  font-size: 22px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.blocks-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.blocks-list {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.block-card {
+  background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+  border: 2px solid #4CAF50;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s;
+}
+
+.block-card:hover {
+  transform: translateY(-1px);
+}
+
+.block-info {
+  flex: 1;
+}
+
+.block-info h4 {
+  color: #2E7D32;
+  margin: 0 0 4px 0;
+  font-size: 16px;
+}
+
+.block-name {
+  color: #333;
+  font-weight: bold;
+  margin: 2px 0;
+  font-size: 14px;
+}
+
+.block-duration {
+  color: #666;
+  font-size: 12px;
+  margin: 2px 0 0 0;
+}
+
+.block-book {
+  color: #4CAF50;
+  font-size: 12px;
+  margin: 4px 0 0 0;
+  font-weight: 600;
+}
+
+.block-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ============ CONFIGURAR BLOQUE ============ */
+
+.configurar-bloque {
+  padding: 20px;
+  max-height: 600px;
+  overflow-y: auto;
+  font-family: 'Comic Neue', cursive, sans-serif;
+}
+
+.bloque-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  border-bottom: 3px solid #2196F3;
+  padding-bottom: 10px;
+}
+
+.configurar-bloque h2 {
+  color: #2196F3;
+  margin: 0;
+  font-size: 22px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.config-form {
+  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+  border: 2px solid #2196F3;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.config-form h3 {
+  color: #1976D2;
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 18px;
+}
+
+.stimuli-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stimuli-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 10px;
+  background: white;
+  border: 2px solid #BBDEFB;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.stimuli-checkbox:hover {
+  background: #F5F5F5;
+  border-color: #2196F3;
+}
+
+.stimuli-checkbox input[type="checkbox"] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  accent-color: #2196F3;
+}
+
+.checkbox-label {
+  font-size: 15px;
+  color: #333;
+  margin: 0;
+}
+
+.form-section {
+  background: white;
+  border: 1px solid #BBDEFB;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.form-section h4 {
+  color: #1976D2;
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-group label {
+  display: block;
+  color: #333;
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 2px solid #BBDEFB;
+  border-radius: 6px;
+  font-family: 'Comic Neue', cursive, sans-serif;
+  font-size: 14px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #2196F3;
+}
+
+.form-group small {
+  display: block;
+  color: #999;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.frequency-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: white;
+  border: 1px solid #BBDEFB;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.frequency-mode input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #2196F3;
+  cursor: pointer;
+}
+
+.frequency-mode span {
+  font-size: 14px;
+  color: #333;
+}
+
+/* ============ BOTONES ============ */
+
+.btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: 'Comic Neue', cursive, sans-serif;
+  font-weight: 600;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #FF6B6B 0%, #FF5252 100%);
+  color: white;
+  box-shadow: 0 4px 6px rgba(255, 107, 107, 0.3);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #FF5252 0%, #FF3838 100%);
+  box-shadow: 0 6px 10px rgba(255, 107, 107, 0.4);
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
+  color: white;
+  box-shadow: 0 4px 6px rgba(156, 39, 176, 0.3);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #7B1FA2 0%, #6A1B9A 100%);
+}
+
+.btn-configure {
+  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+  color: white;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.btn-configure:hover {
+  background: linear-gradient(135deg, #1976D2 0%, #1565C0 100%);
+}
+
+.btn-play {
+  background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+  color: white;
+  font-size: 12px;
+  padding: 6px 10px;
+  font-weight: bold;
+}
+
+.btn-play:hover {
+  background: linear-gradient(135deg, #388E3C 0%, #2E7D32 100%);
+}
+
+.btn-results {
+  background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
+  color: white;
+  font-size: 12px;
+  padding: 6px 10px;
+  font-weight: bold;
+}
+
+.btn-results:hover {
+  background: linear-gradient(135deg, #7B1FA2 0%, #6A1B9A 100%);
+}
+
+.btn-edit {
+  background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+  color: white;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.btn-edit:hover {
+  background: linear-gradient(135deg, #F57C00 0%, #E65100 100%);
+}
+
+.btn-clone {
+  background: linear-gradient(135deg, #00BCD4 0%, #0097A7 100%);
+  color: white;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.btn-clone:hover {
+  background: linear-gradient(135deg, #0097A7 0%, #00838F 100%);
+}
+
+.btn-delete {
+  background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
+  color: white;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.btn-delete:hover {
+  background: linear-gradient(135deg, #D32F2F 0%, #C62828 100%);
+}
+
+.btn-cancel {
+  background: linear-gradient(135deg, #999 0%, #777 100%);
+  color: white;
+}
+
+.btn-cancel:hover {
+  background: linear-gradient(135deg, #777 0%, #555 100%);
+}
+
+.btn-small {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ============ RESULTADOS DE EXPERIMENTO ============ */
+
+.experiment-results-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+.experiment-results {
+  width: 90%;
+  max-width: 1400px;
+  max-height: 90vh;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  overflow: auto;
+  padding: 2.5rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.experiment-results > div:first-child {
+  flex-shrink: 0;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.experiment-results > div:last-child {
+  flex: 1;
+  overflow: auto;
+}
+
+.experiment-results h2 {
+  color: #333;
+  font-size: 1.6rem;
+  margin: 0 0 0.5rem 0;
+}
+
+.experiment-results h3 {
+  color: #555;
+  font-size: 1.2rem;
+  margin: 1.5rem 0 1rem 0;
+}
+
+.experiment-results h4 {
+  color: #666;
+  font-size: 1rem;
+  margin: 1rem 0 0.8rem 0;
+}
+
+/* Layout de dos columnas en resultados */
+.experiment-results > div[style*="display: flex"] {
+  display: flex !important;
+  gap: 2rem;
+  height: 100%;
+}
+
+.experiment-results > div[style*="display: flex"] > div:first-child {
+  flex: 0 0 320px;
+  border-right: 1px solid #e0e0e0;
+  padding-right: 2rem;
+  overflow-y: auto;
+}
+
+.experiment-results > div[style*="display: flex"] > div:last-child {
+  flex: 1;
+  overflow-y: auto;
+  padding-left: 1rem;
+}
+
+/* ============ MODAL ============ */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 998; /* Debajo de elementos fijos (Welcome-message, botones) */
+}
+
+.modal-content {
+  background: white;
+  border-radius: 15px;
+  padding: 30px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  font-family: 'Comic Neue', cursive, sans-serif;
+  z-index: 999; /* Encima del overlay */
+}
+
+.modal-content h3 {
+  color: #FF6B6B;
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 22px;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+/* ============ MENSAJES ============ */
+
+.error-message {
+  background: #FFEBEE;
+  color: #C62828;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  border-left: 4px solid #F44336;
+  font-size: 14px;
+}
+
+.success-message {
+  background: #E8F5E9;
+  color: #2E7D32;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  border-left: 4px solid #4CAF50;
+  font-size: 14px;
+}
+
+.loading,
+.empty-message {
+  text-align: center;
+  color: #999;
+  padding: 20px;
+  font-size: 15px;
+}
+
+/* ============ RESPONSIVE ============ */
+
+@media (max-width: 600px) {
+  .experimento-card,
+  .block-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .experimento-actions,
+  .block-actions {
+    margin-left: 0;
+    margin-top: 10px;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .modal-content {
+    max-width: 95vw;
+    padding: 20px;
+  }
+
+  .stimuli-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-buttons {
+    flex-direction: column;
+  }
+
+  .modal-buttons .btn {
+    width: 100%;
+  }
+}

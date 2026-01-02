@@ -12,6 +12,8 @@
 import React, { useState, useEffect } from 'react';
 import './biblioteca.css';
 import ePub from 'epubjs';
+import ConfigurarExperimentos from './ConfigurarExperimentos';
+import ExperimentRunner from './ExperimentRunner';
 
 import nubeBlanca from './assets/nube.png';
 import nubeSoplonaIzq from './assets/nubesoplonaizq.png';
@@ -21,9 +23,9 @@ import flechaDer from './assets/flechader.png';
 import papalote1 from './assets/papalote1.png';
 import papalote2 from './assets/papalote2.png';
 import papalote3 from './assets/papalote3.png';
-import papalote4 from './assets/papalote4.png';
-import papalote5 from './assets/papalote5.png';
-import papalote6 from './assets/papalote6.png';
+import papalote4 from './assets/papalote4.PNG';
+import papalote5 from './assets/papalote5.PNG';
+import papalote6 from './assets/papalote6.PNG';
 import Lector from './Lector';
 
 function Biblioteca({ userData, onLogout }) {
@@ -37,6 +39,11 @@ function Biblioteca({ userData, onLogout }) {
   const [userForm, setUserForm] = useState({ id: null, username: '', password: '', isDeveloper: false });
   const [editMode, setEditMode] = useState(false);
   const [userError, setUserError] = useState('');
+  
+  // Estado para popover de experimentos
+  const [showExperimentsPopover, setShowExperimentsPopover] = useState(false);
+  const [experimentoActual, setExperimentoActual] = useState(null); // Experimento siendo ejecutado
+  
   const [nubeActiva, setNubeActiva] = useState(null); // Para animación hover
   const [deslizarDireccion, setDeslizarDireccion] = useState(null); // Para animación de transición
   const [paginaActual, setPaginaActual] = useState(0); // Página actual de libros
@@ -231,6 +238,8 @@ function Biblioteca({ userData, onLogout }) {
     };
 
     cargarPagina(paginaActual);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // generarPapalotesAleatorios y librosPorPagina son funciones/valores derivados de state
   }, [paginaActual, columnasVisibles]);
 
   // ============ FUNCIONES DE NAVEGACIÓN ============
@@ -344,6 +353,13 @@ function Biblioteca({ userData, onLogout }) {
         {/* Botón de logout y opciones de desarrollador */}
         <div className="Top-buttons">
           <button 
+            className="Experiments-button" 
+            onClick={() => setShowExperimentsPopover(v => !v)}
+            title="Configurar experimentos"
+          >
+            <span style={{fontSize: '1.5rem'}}>⚗️</span>
+          </button>
+          <button 
             className="Logout-button" 
             onClick={handleLogout}
             title="Cerrar sesión"
@@ -367,6 +383,25 @@ function Biblioteca({ userData, onLogout }) {
             </button>
           )}
         </div>
+
+        {/* Popover de Configurar Experimentos */}
+        {showExperimentsPopover && (
+          <div className="ExperimentsPopover">
+            <ConfigurarExperimentos 
+              userData={userData}
+              onClose={() => {
+                console.log('[biblioteca] Cerrando popover de experimentos');
+                setShowExperimentsPopover(false);
+              }}
+              onStartExperiment={(exp) => {
+                console.log('[biblioteca] onStartExperiment callback recibido:', exp);
+                setExperimentoActual(exp);
+                setShowExperimentsPopover(false);
+                console.log('[biblioteca] experimentoActual establecido a:', exp);
+              }}
+            />
+          </div>
+        )}
 
         {/* Popover de opciones de desarrollador */}
         {userData?.isDeveloper && showDevPopover && (
@@ -521,6 +556,19 @@ function Biblioteca({ userData, onLogout }) {
            userData={userData}
            initialPreferences={userData?.preferences}
           />
+      )}
+
+      {/* ExperimentRunner modal */}
+      {experimentoActual && (
+        <ExperimentRunner 
+          experiment={experimentoActual}
+          userData={userData}
+          onClose={() => setExperimentoActual(null)}
+          onExperimentComplete={() => {
+            setExperimentoActual(null);
+            alert('✅ Experimento completado exitosamente. Los resultados han sido guardados.');
+          }}
+        />
       )}
     </div>
   );
