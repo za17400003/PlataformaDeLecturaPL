@@ -21,3 +21,16 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+# Video y audio files (no subir)
+*.mp4
+*.wav
+*.avi
+*.mov
+*.mkv
+*.flv
+*.m4a
+*.mp3
+
+# Sesiones y datos locales
+/Sesiones/**/*.mp4
+/Sesiones/**/*.wav
