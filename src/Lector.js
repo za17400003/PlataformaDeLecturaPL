@@ -210,6 +210,14 @@ export default function Lector(props) {
               console.log('[lector] 📖 Cargando progreso:', (data.progress).toFixed(1), '%');
               await renditionRef.current.display(targetCfi);
               await new Promise(resolve => setTimeout(resolve, 300));
+              
+              // IMPORTANTE: Actualizar estados con los valores cargados
+              // para que al cerrar el libro se guarde el progreso correcto
+              setCurrentPage(data.currentPage || 1);
+              setTotalPages(data.totalPages || 0);
+              setProgress(data.progress || 0);
+              setSliderValue(data.currentPage || 1);
+              console.log('[lector] ✅ Estados actualizados - Página:', data.currentPage, '/', data.totalPages);
               return;
             }
           } catch (err) {
