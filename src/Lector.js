@@ -182,10 +182,15 @@ export default function Lector(props) {
    */
   const loadReadingProgress = React.useCallback(async () => {
     const token = localStorage.getItem('authToken');
-    if (!token || !archivo || !bookRef.current) return;
+    if (!token || !archivo || !bookRef.current) {
+      console.log('[lector] ⚠️ No se puede cargar progreso: token=', !!token, 'archivo=', !!archivo, 'bookRef=', !!bookRef.current);
+      return;
+    }
 
     try {
       const encodedFile = encodeURIComponent(archivo);
+      console.log('[lector] 📥 Solicitando progreso del servidor para:', archivo);
+      
       const response = await fetch(`/api/reading-progress/${encodedFile}`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -194,6 +199,7 @@ export default function Lector(props) {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('[lector] 📦 Datos recibidos del servidor:', data);
         
         // Si no hay progreso (0), simplemente no cargar nada (mostrar portada)
         if (!data.progress || data.progress === 0) {
@@ -207,23 +213,31 @@ export default function Lector(props) {
             const percentage = data.progress / 100;
             const targetCfi = bookRef.current.locations.cfiFromPercentage(percentage);
             if (targetCfi) {
-              console.log('[lector] 📖 Cargando progreso:', (data.progress).toFixed(1), '%');
+              console.log('[lector] 📖 Navegando a progreso:', (data.progress).toFixed(1), '%');
               await renditionRef.current.display(targetCfi);
               await new Promise(resolve => setTimeout(resolve, 300));
               
               // IMPORTANTE: Actualizar estados con los valores cargados
               // para que al cerrar el libro se guarde el progreso correcto
+              console.log('[lector] 🔄 Actualizando estados React...');
+              console.log('[lector]   currentPage:', data.currentPage, '→ será estado');
+              console.log('[lector]   totalPages:', data.totalPages, '→ será estado');
+              console.log('[lector]   progress:', data.progress, '% → será estado');
+              
               setCurrentPage(data.currentPage || 1);
               setTotalPages(data.totalPages || 0);
               setProgress(data.progress || 0);
               setSliderValue(data.currentPage || 1);
-              console.log('[lector] ✅ Estados actualizados - Página:', data.currentPage, '/', data.totalPages);
+              
+              console.log('[lector] ✅ Estados actualizados correctamente - Página:', data.currentPage, '/', data.totalPages);
               return;
             }
           } catch (err) {
             console.error('[lector] Error cargando progreso:', err);
           }
         }
+      } else {
+        console.warn('[lector] ⚠️ Error en respuesta:', response.status, response.statusText);
       }
     } catch (err) {
       console.error('[lector] Error en loadReadingProgress:', err);
@@ -1430,13 +1444,23 @@ export default function Lector(props) {
   const handleCloseLector = async () => {
     // NO guardar progreso en modo experimento para evitar interferencia con el otro lector
     if (!experimentMode) {
-      console.log('[lector] Guardando progreso antes de cerrar...');
+      console.log('[lector] ═══════════════════════════════════════');
+      console.log('[lector] 💾 CERRANDO LECTOR - Guardando progreso...');
+      console.log('[lector] ─────────────────────────────────────');
+      console.log('[lector] Estado actual en React:');
+      console.log('[lector]   currentPage:', currentPage);
+      console.log('[lector]   totalPages:', totalPages);
+      console.log('[lector]   progress:', progress.toFixed(1) + '%');
+      console.log('[lector]   archivo:', archivo);
+      console.log('[lector] ─────────────────────────────────────');
+      
       try {
         await saveReadingProgress();
-        console.log('[lector] Progreso guardado exitosamente');
+        console.log('[lector] ✅ Progreso guardado exitosamente');
       } catch (e) {
-        console.error('[lector] Error guardando progreso final:', e);
+        console.error('[lector] ❌ Error guardando progreso final:', e);
       }
+      console.log('[lector] ═══════════════════════════════════════');
     } else {
       console.log('[lector] Modo experimento: NO guardando progreso');
     }

@@ -718,6 +718,13 @@ app.put('/api/user/preferences', requireAuth, (req, res) => {
 // Guardar progreso de lectura
 app.post('/api/reading-progress', requireAuth, (req, res) => {
   const { bookFile, currentPage, totalPages, progress } = req.body;
+  const userId = req.user.userId;
+  
+  console.log('[server] 💾 POST /api/reading-progress');
+  console.log('[server]   userId:', userId);
+  console.log('[server]   bookFile:', bookFile);
+  console.log('[server]   currentPage:', currentPage, '/', totalPages);
+  console.log('[server]   progress:', progress?.toFixed(1) + '%' || 'undefined');
   
   // Validar parámetros requeridos
   if (!bookFile || bookFile.trim() === '') {
@@ -734,7 +741,7 @@ app.post('/api/reading-progress', requireAuth, (req, res) => {
     console.error('[server] ❌ ERROR: totalPages inválido:', totalPages);
     return res.status(400).json({ error: 'totalPages debe ser >= 1' });
   }
-  
+
   // Validar que currentPage no exceda totalPages
   if (currentPage > totalPages) {
     console.error('[server] ❌ ERROR: currentPage > totalPages:', { currentPage, totalPages });
@@ -749,13 +756,13 @@ app.post('/api/reading-progress', requireAuth, (req, res) => {
        totalPages = ?,
        progress = ?,
        lastReadAt = CURRENT_TIMESTAMP`,
-    [req.user.userId, bookFile, currentPage, totalPages, progress, currentPage, totalPages, progress],
+    [userId, bookFile, currentPage, totalPages, progress, currentPage, totalPages, progress],
     (err) => {
       if (err) {
         console.error('[server] ❌ ERROR guardando progreso:', err);
         return res.status(500).json({ error: 'Error al guardar progreso' });
       }
-      // Éxito silencioso
+      console.log('[server] ✅ Progreso guardado correctamente en BD');
       res.json({ message: 'Progreso guardado' });
     }
   );
@@ -764,6 +771,11 @@ app.post('/api/reading-progress', requireAuth, (req, res) => {
 // Obtener progreso de lectura de un libro
 app.get('/api/reading-progress/:bookFile', requireAuth, (req, res) => {
   const bookFile = decodeURIComponent(req.params.bookFile);
+  const userId = req.user.userId;
+  
+  console.log('[server] 📥 GET /api/reading-progress/:bookFile');
+  console.log('[server]   userId:', userId);
+  console.log('[server]   bookFile:', bookFile);
   
   // Validar bookFile
   if (!bookFile || bookFile.trim() === '') {
@@ -773,7 +785,7 @@ app.get('/api/reading-progress/:bookFile', requireAuth, (req, res) => {
   
   db.get(
     'SELECT currentPage, totalPages, progress, lastReadAt FROM reading_progress WHERE userId = ? AND bookFile = ?',
-    [req.user.userId, bookFile],
+    [userId, bookFile],
     (err, row) => {
       if (err) {
         console.error('[server] ❌ ERROR obteniendo progreso:', err);
@@ -781,10 +793,16 @@ app.get('/api/reading-progress/:bookFile', requireAuth, (req, res) => {
       }
       
       if (!row) {
+        console.log('[server] ℹ️ Sin progreso previo para este libro');
         // Sin progreso es normal, retornar default sin error
         res.json({ currentPage: 1, totalPages: 0, progress: 0 });
         return;
       }
+      
+      console.log('[server] ✅ Progreso encontrado:');
+      console.log('[server]   currentPage:', row.currentPage, '/', row.totalPages);
+      console.log('[server]   progress:', row.progress?.toFixed(1) + '%' || '0%');
+      console.log('[server]   lastReadAt:', row.lastReadAt);
       
       res.json(row);
     }
