@@ -1151,10 +1151,30 @@ export default function Lector(props) {
   
   /**
    * Avanza a la siguiente página del libro
-   * Aplica estilos antes de cambiar para evitar parpadeo
+   * Actualiza el contador inmediatamente sin esperar el evento relocated
    */
   const goNext = () => {
     if (!renditionRef.current) return;
+    
+    // Calcular la siguiente página
+    const newPage = Math.min(currentPage + 1, totalPages);
+    const { totalPages: totalPagesCalc } = pageCalcRef.current;
+    const newProgress = totalPagesCalc > 0 ? (newPage / totalPagesCalc) * 100 : 0;
+    
+    console.log('[lector] ➡️ SIGUIENTE PÁGINA:', currentPage, '→', newPage);
+    
+    // Actualizar estados INMEDIATAMENTE para feedback visual
+    setCurrentPage(newPage);
+    setSliderValue(newPage);
+    setProgress(newProgress);
+    
+    // Guardar progreso
+    saveReadingProgress({
+      currentPage: newPage,
+      totalPages: totalPagesCalc,
+      progress: newProgress
+    });
+    
     // Aplicar estilos antes de cambiar página para evitar parpadeo blanco
     applyPrefsToBook();
     renditionRef.current.next().catch(() => {});
@@ -1162,10 +1182,30 @@ export default function Lector(props) {
 
   /**
    * Retrocede a la página anterior del libro
-   * Aplica estilos antes de cambiar para evitar parpadeo
+   * Actualiza el contador inmediatamente sin esperar el evento relocated
    */
   const goPrev = () => {
     if (!renditionRef.current) return;
+    
+    // Calcular la página anterior
+    const newPage = Math.max(currentPage - 1, 1);
+    const { totalPages: totalPagesCalc } = pageCalcRef.current;
+    const newProgress = totalPagesCalc > 0 ? (newPage / totalPagesCalc) * 100 : 0;
+    
+    console.log('[lector] ⬅️ PÁGINA ANTERIOR:', currentPage, '→', newPage);
+    
+    // Actualizar estados INMEDIATAMENTE para feedback visual
+    setCurrentPage(newPage);
+    setSliderValue(newPage);
+    setProgress(newProgress);
+    
+    // Guardar progreso
+    saveReadingProgress({
+      currentPage: newPage,
+      totalPages: totalPagesCalc,
+      progress: newProgress
+    });
+    
     // Aplicar estilos antes de cambiar página para evitar parpadeo blanco
     applyPrefsToBook();
     renditionRef.current.prev().catch(() => {});
@@ -1214,27 +1254,45 @@ export default function Lector(props) {
   
   /**
    * Navega a una página específica usando el slider
+   * Actualiza el contador inmediatamente para feedback visual sin delay
    * En Google Play Books style, cada página es una location
    * @param {Event} e - Evento del input range
    */
   const handleSliderChange = (e) => {
     const pageNum = parseInt(e.target.value, 10);
     
-    // Actualizar inmediatamente el slider para feedback visual
+    console.log('[lector] 🔄 Navegando a página:', pageNum);
+    
+    // Actualizar INMEDIATAMENTE el slider Y el contador para feedback visual instantáneo
     setSliderValue(pageNum);
+    setCurrentPage(pageNum);
+    
+    // Calcular y actualizar el progreso
+    const { totalPages: totalPagesCalc } = pageCalcRef.current;
+    const newProgress = totalPagesCalc > 0 ? (pageNum / totalPagesCalc) * 100 : 0;
+    setProgress(newProgress);
+    
+    console.log('[lector] ✅ Contador actualizado: Página', pageNum, '/', totalPagesCalc, '-', newProgress.toFixed(1) + '%');
     
     const book = bookRef.current;
     const rendition = renditionRef.current;
     
     if (book && rendition && book.locations.length()) {
       // Calcular porcentaje basado en el número de página
-      const { totalPages: totalPagesCalc } = pageCalcRef.current;
       const percentage = (pageNum - 1) / Math.max(1, totalPagesCalc - 1);
       const cfi = book.locations.cfiFromPercentage(percentage);
       if (cfi) {
-        // Navegar
+        // Navegar el libro
+        console.log('[lector] 📖 Navegando libro al CFI...');
         rendition.display(cfi).catch((err) => {
           console.error('[lector] Error en display():', err);
+        });
+        
+        // Guardar el progreso en el servidor
+        saveReadingProgress({
+          currentPage: pageNum,
+          totalPages: totalPagesCalc,
+          progress: newProgress
         });
       }
     }
