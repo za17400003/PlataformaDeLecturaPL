@@ -75,7 +75,7 @@
   right: 1.5rem;
   display: flex;
   gap: 0.5rem;
-  z-index: 1001;
+  z-index: 100;
 }
 
 /* Mensaje de bienvenida */
@@ -91,7 +91,7 @@
   font-family: 'Comic Neue', cursive;
   font-size: 1rem;
   color: #00a69d;
-  z-index: 1001;
+  z-index: 100;
   animation: slideInLeft 0.5s ease-out;
 }
 
@@ -142,7 +142,7 @@
   box-shadow: 0 8px 32px rgba(0,0,0,0.18);
   padding: 1.5rem 1.2rem 1.2rem 1.2rem;
   min-width: 320px;
-  z-index: 1100;
+  z-index: 100;
 }
 .DevPopover-title {
   font-weight: bold;
@@ -190,9 +190,7 @@ html, body {
   align-items: center;
   justify-content: flex-start;
   padding: 0.6rem 0.8rem 3rem 0.8rem; /* Más colchón inferior para la fila de abajo */
-  min-height: 100vh; /* Altura mínima pantalla, pero deja crecer si hay más contenido */
-  height: auto;
-  overflow-y: auto; /* Permitir scroll si se requiere */
+
   /* Fondo: 2/3 blanco, 1/3 azul */
   background: 
     linear-gradient(to bottom,
@@ -233,7 +231,7 @@ html, body {
   padding: 0.7rem;
   cursor: pointer;
   transition: all 0.3s ease;
-  z-index: 1000;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -592,8 +590,8 @@ html, body {
 /* Pantalla grande (>1200px) */
 @media (min-width: 1200px) {
   .Libro-nube {
-    min-height: 340px;
-    max-width: 320px;
+    min-height: 300px;
+    max-width: 300px;
   }
 }
 
@@ -601,15 +599,15 @@ html, body {
 @media (min-width: 1025px) and (max-width: 1199px) {
   .Libro-nube {
     min-height: 300px;
-    max-width: 280px;
+    max-width: 300px;
   }
 }
 
 /* Tablet (769px-1024px) */
 @media (min-width: 769px) and (max-width: 1024px) {
   .Libro-nube {
-    min-height: 260px;
-    max-width: 240px;
+    min-height: 300px;
+    max-width: 300px;
   }
 }
 

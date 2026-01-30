@@ -1,5 +1,5 @@
 /**
- * Configuración centralizada para la aplicación ADL
+ * Configuración centralizada para la aplicación PL
  * Variables de entorno y valores por defecto
  */
 
@@ -58,8 +58,11 @@ module.exports = {
 
   // Configuración de email para verificación
   EMAIL: {
-    // Usar Gmail o servidor SMTP
-    SERVICE: process.env.EMAIL_SERVICE || 'gmail',
+    // Servicio a usar: 'sendgrid', 'gmail', o 'smtp'
+    SERVICE: process.env.EMAIL_SERVICE || 'sendgrid',
+    // SendGrid API Key
+    SENDGRID_API_KEY: process.env.SENDGRID_API_KEY || '',
+    // Email (para Gmail o SMTP)
     USER: process.env.EMAIL_USER || 'tu-email@gmail.com',
     PASSWORD: process.env.EMAIL_PASSWORD || 'tu-contraseña-app',
     FROM: process.env.EMAIL_FROM || 'noreply@bibliotecadigital.com',

@@ -1,0 +1,28 @@
+{
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/build": true,
+    "**/.git": true,
+    "**/dist": true,
+    "**/.next": true,
+    "**/coverage": true
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/build/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/dist/**": true
+  },
+  "typescript.tsserver.maxTsServerMemory": 4096,
+  "editor.minimap.enabled": false,
+  "editor.suggest.showIcons": false,
+  "editor.codeLens": false,
+  "git.autorefresh": false,
+  "extensions.autoUpdate": false
+}

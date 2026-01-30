@@ -31,6 +31,12 @@
   height: 100%;
   padding: 0;
   margin: 0;
+  /* Asegurar que el contenedor tiene píxeles completos */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  image-rendering: auto;
+  image-rendering: crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
 }
 
 .Lector-viewer .epub-container {
@@ -40,6 +46,9 @@
   position: relative;
   /* Transición suave del color de fondo */
   transition: background-color 0.15s ease;
+  /* Renderizar imágenes nítidamente */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 .Lector-viewer iframe {
@@ -49,6 +58,14 @@
   border: none;
   /* Transición suave para cambios de contenido */
   transition: background-color 0.15s ease;
+  /* Mejorar renderización de contenido en iframe */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  /* Asegurar escala correcta */
+  transform: translate3d(0,0,0);
+  -webkit-transform: translate3d(0,0,0);
 }
 
 /* Tema oscuro - fondo dinámico del iframe */

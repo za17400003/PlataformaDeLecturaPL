@@ -179,7 +179,12 @@ function Biblioteca({ userData, onLogout }) {
       setCargandoPortadas(true);
       
       try {
-        const res = await fetch(`/api/libros?page=${pageNumber}&limit=${librosPorPagina}`);
+        const token = localStorage.getItem('authToken');
+        const res = await fetch(`/api/libros?page=${pageNumber}&limit=${librosPorPagina}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         
         if (!res.ok) {
           throw new Error(`Error del servidor: ${res.status}`);
@@ -198,7 +203,7 @@ function Biblioteca({ userData, onLogout }) {
         const resultados = await Promise.all(
           (data.books || []).map(async (libro) => {
             try {
-              console.log('Cargando libro:', libro.archivo);
+    
               // Construir URL válida para el libro
               const bookUrl = libro.archivo.startsWith('http') ? libro.archivo : `http://localhost:3000${libro.archivo}`;
               const epub = ePub(bookUrl);
@@ -213,7 +218,7 @@ function Biblioteca({ userData, onLogout }) {
                 
                 if (coverUrl) {
                   portada = await epub.archive.createUrl(coverUrl, { base64: true });
-                  console.log('Portada cargada para:', libro.titulo);
+        
                 }
               } catch (error) {
                 console.error('Error al cargar metadatos/portada:', error);

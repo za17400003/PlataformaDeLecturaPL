@@ -5,6 +5,7 @@ function VerifyEmail() {
   const [estado, setEstado] = useState('verificando'); // 'verificando', 'exito', 'error'
   const [mensaje, setMensaje] = useState('');
   const [usuario, setUsuario] = useState('');
+  const [contador, setContador] = useState(5);
 
   useEffect(() => {
     // Obtener token de la URL
@@ -36,10 +37,19 @@ function VerifyEmail() {
           localStorage.setItem('authToken', data.authToken);
           localStorage.setItem('usuario', data.username);
           
-          // Redirigir al inicio después de 2 segundos
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 2000);
+          // Iniciar contador de 5 segundos
+          let tiempoRestante = 5;
+          setContador(5);
+          
+          const intervalo = setInterval(() => {
+            tiempoRestante--;
+            setContador(tiempoRestante);
+            
+            if (tiempoRestante <= 0) {
+              clearInterval(intervalo);
+              window.location.href = '/';
+            }
+          }, 1000);
         }
       } else {
         setEstado('error');
@@ -72,8 +82,8 @@ function VerifyEmail() {
               <p>Usuario: <strong>{usuario}</strong></p>
             </div>
             <div className="next-steps">
-              <p>Ya puedes iniciar sesión con tu usuario y contraseña.</p>
-              <a href="/" className="btn-ir-inicio">Ir al inicio</a>
+              <p>Redirigiendo en <strong>{contador}</strong> segundos...</p>
+              <a href="/" className="btn-ir-inicio" style={{ pointerEvents: 'none', opacity: 0.6 }}>Ir al inicio</a>
             </div>
           </div>
         )}

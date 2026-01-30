@@ -1,5 +1,94 @@
 /* ============ EXPERIMENT RUNNER ============ */
 
+/* Fullscreen para cuando se está ejecutando el experimento */
+.experiment-runner-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  z-index: 2000;
+  background: white;
+  overflow: hidden;
+}
+
+.experiment-runner-fullscreen .experiment-header {
+  background: linear-gradient(135deg, #6B73FF 0%, #7B8FFF 100%);
+  color: white;
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 2001;
+  flex-shrink: 0;
+}
+
+.experiment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  gap: 1rem;
+}
+
+.experiment-progress {
+  font-size: 1rem;
+  font-weight: bold;
+  flex: 1;
+}
+
+.experiment-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.experiment-controls button {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.btn-pause {
+  background: #FF9800;
+  color: white;
+}
+
+.btn-pause:hover {
+  background: #F57C00;
+}
+
+.btn-resume {
+  background: #4CAF50;
+  color: white;
+}
+
+.btn-resume:hover {
+  background: #45a049;
+}
+
+.btn-cancel {
+  background: #f44336;
+  color: white;
+}
+
+.btn-cancel:hover {
+  background: #da190b;
+}
+
+.experiment-runner-fullscreen > :not(.experiment-header) {
+  flex: 1;
+  overflow-y: auto;
+}
+
 .experiment-runner-overlay {
   position: fixed;
   top: 0;

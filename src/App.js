@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './App.css';
 
 import solAnimado from './assets/sol.png';
@@ -8,6 +9,7 @@ import RegistroPopover from './RegistroPopover';
 import VerifyEmail from './VerifyEmail';
 
 function App() {
+  const navigate = useNavigate();
   const [usuario, setUsuario] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [cargando, setCargando] = useState(false);
@@ -212,6 +214,27 @@ function App() {
         >
           Crear cuenta
         </button>
+
+        <div className="Login-password-recovery">
+          <span>¿Olvidaste tu contraseña? </span>
+          <button
+            className="Link-recuperar-contrasena"
+            onClick={() => navigate('/recuperar-contrasena')}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#0066cc',
+              cursor: 'pointer',
+              padding: 0,
+              textDecoration: 'underline',
+              fontSize: 'inherit',
+              fontFamily: 'inherit',
+              fontWeight: 'normal'
+            }}
+          >
+            Haz click aquí
+          </button>
+        </div>
       </div>
 
       <img

@@ -6,15 +6,15 @@ const fs = require('fs');
 const path = require('path');
 const execAsync = promisify(exec);
 
-console.log('🧹 LIMPIEZA ÓPTIMA - Eliminando TODAS las instancias ADL...\n');
+console.log('🧹 LIMPIEZA ÓPTIMA - Eliminando TODAS las instancias PL...\n');
 
-const PID_FILE = path.join(__dirname, '.adl.pid');
-const LOCK_FILE = path.join(__dirname, '.adl.lock');
+const PID_FILE = path.join(__dirname, '.pl.pid');
+const LOCK_FILE = path.join(__dirname, '.pl.lock');
 
 async function optimalCleanup() {
   try {
-    // 1. ELIMINAR TODOS los procesos Node.js relacionados con ADL
-    console.log('� Eliminando TODOS los procesos ADL...');
+    // 1. ELIMINAR TODOS los procesos Node.js relacionados con PL
+    console.log('❌ Eliminando TODOS los procesos PL...');
     
     try {
       // Matar TODOS los procesos Node.js sin excepción

@@ -45,10 +45,11 @@ function RegistroPopover({ onClose, onRegistroExitoso }) {
       return;
     }
 
-    if (!isInstitutionalEmail(emailRegistro)) {
-      setError('Solo se permiten correos institucionales:\n@zapopan.tecmm.edu.mx\n@cicese.mx');
-      return;
-    }
+    // TEMPORALMENTE DESACTIVADO: Validación de correos institucionales
+    // if (!isInstitutionalEmail(emailRegistro)) {
+    //   setError('Solo se permiten correos institucionales:\n@zapopan.tecmm.edu.mx\n@cicese.mx');
+    //   return;
+    // }
 
     if (!contrasenaRegistro) {
       setError('Por favor, ingresa una contraseña');
@@ -219,12 +220,23 @@ function RegistroPopover({ onClose, onRegistroExitoso }) {
               <p>💡 <strong>Nota:</strong> El correo puede tardar algunos minutos en llegar. Revisa tu carpeta de spam si no lo ves.</p>
             </div>
 
-            <button
-              className="RegistroPopover-btn-crear"
-              onClick={onClose}
-            >
-              Entendido
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="RegistroPopover-btn-crear"
+                onClick={handleReenviarVerificacion}
+                disabled={cargando}
+                style={{ backgroundColor: '#FF9500', flex: '1', minWidth: '150px' }}
+              >
+                {cargando ? <div className="loader-registro" /> : '📧 Reenviar Correo'}
+              </button>
+              <button
+                className="RegistroPopover-btn-crear"
+                onClick={onClose}
+                style={{ flex: '1', minWidth: '150px' }}
+              >
+                Entendido
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -37,6 +37,8 @@ function createErrorResponse(statusCode, message, error = null) {
 // Middleware para desactivar keep-alive y forzar conexiones de una sola vez
 app.use((req, res, next) => {
   res.set('Connection', 'close');
+  // Permitir scripts inline, Google Fonts, CDNs, blob URLs para imágenes y estilos (para epubjs)
+  res.set('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' blob: https://fonts.googleapis.com https://fonts.gstatic.com; font-src 'self' blob: https://fonts.gstatic.com; img-src 'self' data: blob: https: http:");
   next();
 });
 
@@ -125,24 +127,27 @@ function requireVerified(req, res, next) {
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   
-  console.log(`📱 LOGIN INTENTO: usuario="${username}", contraseña="${password}"`);
-  console.log(`   Longitud contraseña: ${password ? password.length : 0}`);
-  
   // Validación de inputs
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
+  if (!username || !username.trim()) {
+    console.error(`❌ ERROR LOGIN: username vacío`);
+    return res.status(400).json({ error: 'Usuario requerido' });
+  }
+  
+  if (!password) {
+    console.error(`❌ ERROR LOGIN: password no proporcionada para usuario "${username}"`);
+    return res.status(400).json({ error: 'Contraseña requerida' });
   }
   
   // Validar longitud de entrada para prevenir ataques
   if (username.length < config.VALIDATION.USERNAME_MIN_LENGTH || 
       username.length > config.VALIDATION.USERNAME_MAX_LENGTH) {
-    console.log(`❌ Usuario inválido: longitud ${username.length}`);
+    console.error(`❌ ERROR LOGIN: username longitud inválida: ${username.length}`);
     return res.status(400).json({ error: 'Usuario inválido' });
   }
   
   if (password.length < config.VALIDATION.PASSWORD_MIN_LENGTH || 
       password.length > config.VALIDATION.PASSWORD_MAX_LENGTH) {
-    console.log(`❌ Contraseña inválida: longitud ${password.length}`);
+    console.error(`❌ ERROR LOGIN: password longitud inválida: ${password.length}`);
     return res.status(400).json({ error: 'Contraseña inválida' });
   }
   
@@ -151,40 +156,35 @@ app.post('/api/login', (req, res) => {
     [username],
     async (err, user) => {
       if (err) {
-        console.error('❌ Error en login:', err);
+        console.error('❌ ERROR LOGIN en DB:', err);
         return res.status(500).json({ error: 'Error del servidor' });
       }
       
       if (!user) {
-        console.log(`❌ Usuario no encontrado: "${username}"`);
+        console.error(`❌ ERROR LOGIN: usuario no encontrado: "${username}"`);
         return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
       }
       
-      console.log(`✅ Usuario encontrado: "${username}", verificado: ${user.isVerified === 1}`);
-      console.log(`   Hash guardado: ${user.password.substring(0, 30)}...`);
-      
-      // Verificar si la cuenta está verificada
-      if (!user.isVerified) {
-        console.log(`⚠️  Cuenta no verificada`);
-        return res.status(403).json({ 
-          error: 'Por favor verifica tu correo electrónico antes de iniciar sesión',
-          unverified: true,
-          email: user.email
-        });
-      }
+      // ⚠️ TEMPORALMENTE DESACTIVADO: Verificar si la cuenta está verificada
+      // if (!user.isVerified) {
+      //   console.error(`❌ ERROR LOGIN: cuenta no verificada para "${username}"`);
+      //   return res.status(403).json({ 
+      //     error: 'Por favor verifica tu correo electrónico antes de iniciar sesión',
+      //     unverified: true,
+      //     email: user.email
+      //   });
+      // }
       
       // Comparar contraseña con bcrypt
       try {
         const ok = await bcrypt.compare(password, user.password);
-        console.log(`   Comparación bcrypt: ${ok ? '✅ COINCIDE' : '❌ NO COINCIDE'}`);
         
         if (!ok) {
-          console.log(`❌ Contraseña incorrecta`);
+          console.error(`❌ ERROR LOGIN: contraseña incorrecta para "${username}"`);
           return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
         }
-        console.log(`✅ Contraseña correcta`);
       } catch (e) {
-        console.error('❌ Error comparando bcrypt:', e);
+        console.error('❌ ERROR LOGIN en bcrypt compare:', e);
         return res.status(500).json({ error: 'Error del servidor' });
       }
 
@@ -198,13 +198,11 @@ app.post('/api/login', (req, res) => {
         expiresAt
       });
       
-      console.log(`🔑 Token generado para usuario: "${username}"`);
-      
       let preferences = { fontSize: 100, theme: 'light', font: 'original', lineHeight: 1.45, brightness: 1.0 };
       try {
         preferences = JSON.parse(user.preferences);
       } catch (e) {
-        console.error('Error parseando preferencias:', e);
+        console.warn('⚠️ Error parseando preferencias de usuario:', e.message);
       }
       
       res.json({
@@ -251,13 +249,13 @@ app.post('/api/register', async (req, res) => {
     return res.status(400).json({ error: 'Correo electrónico inválido' });
   }
   
-  // Validar que sea correo institucional
-  if (!emailService.isInstitutionalEmail(email)) {
-    const allowedDomains = config.INSTITUTIONAL_EMAILS.domains.join(', ');
-    return res.status(400).json({ 
-      error: `Solo se permiten correos institucionales: ${allowedDomains}` 
-    });
-  }
+  // TEMPORALMENTE DESACTIVADO: Validación de correos institucionales
+  // if (!emailService.isInstitutionalEmail(email)) {
+  //   const allowedDomains = config.INSTITUTIONAL_EMAILS.domains.join(', ');
+  //   return res.status(400).json({ 
+  //     error: `Solo se permiten correos institucionales: ${allowedDomains}` 
+  //   });
+  // }
   
   // Verificar si el usuario o email ya existe
   db.get(
@@ -293,15 +291,15 @@ app.post('/api/register', async (req, res) => {
         // Hashear contraseña
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        // Generar token de verificación
+        // Generar token de verificación (por si acaso)
         const verificationToken = emailService.generateVerificationToken();
         const expiresAt = emailService.getTokenExpirationDate();
         
-        // Insertar nuevo usuario sin verificar
+        // ⚠️ TEMPORALMENTE: Crear usuario YA VERIFICADO (sin requerir email)
         db.run(
           `INSERT INTO users (username, email, password, isDeveloper, isVerified, verificationToken, verificationTokenExpires, preferences)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [username, email, hashedPassword, 0, 0, verificationToken, expiresAt, 
+          [username, email, hashedPassword, 0, 1, verificationToken, expiresAt, 
            JSON.stringify({ fontSize: 100, theme: 'light', font: 'original', lineHeight: 1.45, brightness: 1.0 })],
           async function(err) {
             if (err) {
@@ -310,13 +308,18 @@ app.post('/api/register', async (req, res) => {
             }
             
             try {
-              // Enviar email de verificación
-              await emailService.sendVerificationEmail(email, username, verificationToken);
+              // ⚠️ TEMPORALMENTE DESACTIVADO: Envío de email
+              // await emailService.sendVerificationEmail(email, username, verificationToken);
+              
+              console.log('✅ Usuario registrado (VERIFICACIÓN DE EMAIL DESACTIVADA):', username);
               
               res.status(201).json({ 
-                message: 'Cuenta creada. Se envió un correo de verificación a tu email.',
+                message: '✅ Cuenta creada exitosamente. Puedes iniciar sesión ahora.',
                 userId: this.lastID,
-                requiresVerification: true
+                username: username,
+                email: email,
+                requiresVerification: false,
+                verified: true
               });
             } catch (emailErr) {
               console.error('Error enviando email de verificación:', emailErr);
@@ -472,6 +475,192 @@ app.post('/api/resend-verification', async (req, res) => {
   );
 });
 
+// ============================================================
+// RECUPERACIÓN DE CONTRASEÑA
+// ============================================================
+
+/**
+ * Solicitar recuperación de contraseña
+ * POST /api/forgot-password
+ */
+app.post('/api/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  
+  if (!email) {
+    return res.status(400).json({ error: 'Correo requerido' });
+  }
+  
+  db.get(
+    'SELECT id, username, email FROM users WHERE email = ?',
+    [email],
+    async (err, user) => {
+      if (err) {
+        console.error('Error buscando usuario:', err);
+        return res.status(500).json({ error: 'Error del servidor' });
+      }
+      
+      if (!user) {
+        // No revelar si el email existe o no (por seguridad)
+        return res.json({ 
+          message: 'Si el correo existe en nuestro sistema, recibirás un enlace para recuperar tu contraseña',
+          email: email
+        });
+      }
+      
+      try {
+        // Generar token de recuperación
+        const resetToken = emailService.generateVerificationToken();
+        const expiresAt = emailService.getTokenExpirationDate();
+        
+        // Guardar token en base de datos
+        db.run(
+          'UPDATE users SET resetToken = ?, resetTokenExpires = ? WHERE id = ?',
+          [resetToken, expiresAt, user.id],
+          async (err) => {
+            if (err) {
+              console.error('Error guardando token de recuperación:', err);
+              return res.status(500).json({ error: 'Error al procesar solicitud' });
+            }
+            
+            try {
+              // ⚠️ TEMPORALMENTE DESACTIVADO: Envío de email de recuperación
+              // await emailService.sendPasswordResetEmail(email, user.username, resetToken);
+              
+              console.log('✅ Token de recuperación generado (EMAIL DESACTIVADO):', user.username);
+              console.log('🔗 Token para testing:', resetToken);
+              
+              res.json({ 
+                message: '✅ Token de recuperación generado. Usa el token para cambiar tu contraseña.',
+                email: email,
+                username: user.username,
+                token: resetToken,  // 🔧 TEMPORALMENTE: Devolver token para testing
+                resetUrl: `http://localhost:3000/recuperar-contrasena?token=${resetToken}`,
+                expiresIn: '1 hora'
+              });
+            } catch (emailErr) {
+              console.error('Error enviando email de recuperación:', emailErr);
+              // Aun así devolvemos un mensaje genérico (no revelamos si falló el envío)
+              res.json({ 
+                message: '✅ Token de recuperación generado. Usa el token para cambiar tu contraseña.',
+                email: email,
+                username: user.username,
+                token: resetToken,  // 🔧 TEMPORALMENTE: Devolver token para testing
+                resetUrl: `http://localhost:3000/recuperar-contrasena?token=${resetToken}`,
+                emailError: true
+              });
+            }
+          }
+        );
+      } catch (err) {
+        console.error('Error generando token:', err);
+        return res.status(500).json({ error: 'Error del servidor' });
+      }
+    }
+  );
+});
+
+/**
+ * Verificar token de recuperación
+ * GET /api/verify-reset-token?token=xxxxx
+ */
+app.get('/api/verify-reset-token', (req, res) => {
+  const { token } = req.query;
+  
+  if (!token) {
+    return res.status(400).json({ error: 'Token requerido' });
+  }
+  
+  db.get(
+    'SELECT id, username, email, resetTokenExpires FROM users WHERE resetToken = ?',
+    [token],
+    (err, user) => {
+      if (err) {
+        console.error('Error verificando token:', err);
+        return res.status(500).json({ error: 'Error del servidor' });
+      }
+      
+      if (!user) {
+        return res.status(404).json({ error: 'Token inválido' });
+      }
+      
+      // Verificar si el token expiró
+      if (new Date() > new Date(user.resetTokenExpires)) {
+        return res.status(400).json({ error: 'El token de recuperación expiró' });
+      }
+      
+      res.json({ 
+        message: 'Token válido',
+        username: user.username,
+        email: user.email,
+        token: token
+      });
+    }
+  );
+});
+
+/**
+ * Restablecer contraseña
+ * POST /api/reset-password
+ */
+app.post('/api/reset-password', async (req, res) => {
+  const { token, nuevaContrasena } = req.body;
+  
+  if (!token || !nuevaContrasena) {
+    return res.status(400).json({ error: 'Token y contraseña requeridos' });
+  }
+  
+  // Validar longitud de contraseña
+  if (nuevaContrasena.length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  }
+  
+  db.get(
+    'SELECT id, username, email, resetTokenExpires FROM users WHERE resetToken = ?',
+    [token],
+    async (err, user) => {
+      if (err) {
+        console.error('Error buscando usuario:', err);
+        return res.status(500).json({ error: 'Error del servidor' });
+      }
+      
+      if (!user) {
+        return res.status(404).json({ error: 'Token inválido o expirado' });
+      }
+      
+      // Verificar si el token expiró
+      if (new Date() > new Date(user.resetTokenExpires)) {
+        return res.status(400).json({ error: 'El token de recuperación expiró' });
+      }
+      
+      try {
+        // Hashear nueva contraseña
+        const hashedPassword = await bcrypt.hash(nuevaContrasena, 10);
+        
+        // Actualizar contraseña y limpiar token
+        db.run(
+          'UPDATE users SET password = ?, resetToken = NULL, resetTokenExpires = NULL WHERE id = ?',
+          [hashedPassword, user.id],
+          (err) => {
+            if (err) {
+              console.error('Error actualizando contraseña:', err);
+              return res.status(500).json({ error: 'Error al actualizar contraseña' });
+            }
+            
+            res.json({ 
+              message: 'Contraseña actualizada exitosamente',
+              username: user.username,
+              email: user.email
+            });
+          }
+        );
+      } catch (hashErr) {
+        console.error('Error hasheando contraseña:', hashErr);
+        return res.status(500).json({ error: 'Error del servidor' });
+      }
+    }
+  );
+});
+
 // Logout
 app.post('/api/logout', requireAuth, (req, res) => {
   const authHeader = req.headers.authorization;
@@ -530,28 +719,43 @@ app.put('/api/user/preferences', requireAuth, (req, res) => {
 app.post('/api/reading-progress', requireAuth, (req, res) => {
   const { bookFile, currentPage, totalPages, progress } = req.body;
   
-  console.log('[server] 💾 POST /api/reading-progress:', { bookFile, currentPage, totalPages, progress: progress?.toFixed(1) + '%' });
-  
-  if (!bookFile || currentPage === undefined || totalPages === undefined) {
-    console.error('[server] ❌ Datos incompletos:', req.body);
-    return res.status(400).json({ error: 'Datos incompletos' });
+  // Validar parámetros requeridos
+  if (!bookFile || bookFile.trim() === '') {
+    console.error('[server] ❌ ERROR: bookFile vacío o no proporcionado');
+    return res.status(400).json({ error: 'bookFile es requerido' });
   }
   
+  if (currentPage === undefined || currentPage === null || currentPage < 1) {
+    console.error('[server] ❌ ERROR: currentPage inválido:', currentPage);
+    return res.status(400).json({ error: 'currentPage debe ser >= 1' });
+  }
+  
+  if (totalPages === undefined || totalPages === null || totalPages < 1) {
+    console.error('[server] ❌ ERROR: totalPages inválido:', totalPages);
+    return res.status(400).json({ error: 'totalPages debe ser >= 1' });
+  }
+  
+  // Validar que currentPage no exceda totalPages
+  if (currentPage > totalPages) {
+    console.error('[server] ❌ ERROR: currentPage > totalPages:', { currentPage, totalPages });
+    return res.status(400).json({ error: 'currentPage no puede exceder totalPages' });
+  }
+
   db.run(
     `INSERT INTO reading_progress (userId, bookFile, currentPage, totalPages, progress, lastReadAt)
-     VALUES (?, ?, ?, ?, ?, datetime('now'))
+     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(userId, bookFile) DO UPDATE SET 
        currentPage = ?,
        totalPages = ?,
        progress = ?,
-       lastReadAt = datetime('now')`,
+       lastReadAt = CURRENT_TIMESTAMP`,
     [req.user.userId, bookFile, currentPage, totalPages, progress, currentPage, totalPages, progress],
     (err) => {
       if (err) {
-        console.error('[server] ❌ Error guardando progreso:', err);
+        console.error('[server] ❌ ERROR guardando progreso:', err);
         return res.status(500).json({ error: 'Error al guardar progreso' });
       }
-      console.log('[server] ✅ Progreso guardado para', bookFile);
+      // Éxito silencioso
       res.json({ message: 'Progreso guardado' });
     }
   );
@@ -561,23 +765,27 @@ app.post('/api/reading-progress', requireAuth, (req, res) => {
 app.get('/api/reading-progress/:bookFile', requireAuth, (req, res) => {
   const bookFile = decodeURIComponent(req.params.bookFile);
   
-  console.log('[server] 📖 GET /api/reading-progress/:bookFile -', bookFile);
+  // Validar bookFile
+  if (!bookFile || bookFile.trim() === '') {
+    console.error('[server] ❌ ERROR: bookFile vacío en GET /api/reading-progress/:bookFile');
+    return res.status(400).json({ error: 'bookFile es requerido' });
+  }
   
   db.get(
     'SELECT currentPage, totalPages, progress, lastReadAt FROM reading_progress WHERE userId = ? AND bookFile = ?',
     [req.user.userId, bookFile],
     (err, row) => {
       if (err) {
-        console.error('[server] ❌ Error obteniendo progreso:', err);
+        console.error('[server] ❌ ERROR obteniendo progreso:', err);
         return res.status(500).json({ error: 'Error al obtener progreso' });
       }
       
       if (!row) {
-        console.log('[server] ℹ️ No hay progreso guardado para', bookFile);
-        return res.json({ currentPage: 1, totalPages: 0, progress: 0 });
+        // Sin progreso es normal, retornar default sin error
+        res.json({ currentPage: 1, totalPages: 0, progress: 0 });
+        return;
       }
       
-      console.log('[server] ✅ Progreso encontrado:', { bookFile, currentPage: row.currentPage, totalPages: row.totalPages, progress: row.progress?.toFixed(1) + '%' });
       res.json(row);
     }
   );
@@ -637,292 +845,69 @@ app.get('/api/user-preferences', requireAuth, (req, res) => {
   );
 });
 
-// Guardar preferencias del usuario
-app.post('/api/user-preferences', requireAuth, (req, res) => {
-  const prefs = req.body;
+
+// ============ ENDPOINTS DE EXPERIMENTOS V2 ============
+// Nota: La versión v1 (GET/POST/PUT/DELETE /api/experiments) fue eliminada
+// Usar endpoints /api/experiments-v2 en su lugar
+
+// Iniciar experimento - Comunica con Flask para lanzar lector.py
+app.post('/api/experiment-runs/start', requireVerified, async (req, res) => {
+  const { experimentId } = req.body;
   
-  if (!prefs) {
-    return res.status(400).json({ error: 'Preferencias requeridas' });
+  try {
+    // 1. Obtener experimento y su configuración
+    db.get(
+      'SELECT * FROM experiments WHERE id = ? AND user_id = ?',
+      [experimentId, req.user.userId],
+      async (err, experiment) => {
+        if (err || !experiment) {
+          return res.status(403).json({ error: 'Experimento no encontrado' });
+        }
+        
+        if (experiment.deleted_at) {
+          return res.status(400).json({ error: 'Experimento eliminado' });
+        }
+        
+        try {
+          // 2. Crear corrida en BD
+          const config = typeof experiment.config === 'string' ? JSON.parse(experiment.config) : experiment.config || {};
+          const numBlocks = config.num_blocks || 5;
+          const sessionId = `session_${experimentId}_${Date.now()}`;
+          
+          db.run(
+            `INSERT INTO experiment_runs (experiment_id, user_id, session_id, status, started_at)
+             VALUES (?, ?, ?, 'in_progress', CURRENT_TIMESTAMP)`,
+            [experimentId, req.user.userId, sessionId],
+            async function(err) {
+              if (err) {
+                console.error('Error creando corrida:', err);
+                return res.status(500).json({ error: 'Error al crear corrida' });
+              }
+              
+              const runId = this.lastID;
+              
+              // 3. DESACTIVADO: Flask/Python por ahora (será activado después)
+              // Retornar runId para que React lo use sin Python
+              res.status(201).json({
+                runId: runId,
+                experimentId: experimentId,
+                totalBlocks: numBlocks,
+                config: config,
+                pythonAvailable: false,
+                pythonStatus: 'disabled'
+              });
+            }
+          );
+        } catch (parseErr) {
+          res.status(400).json({ error: 'Configuración inválida' });
+        }
+      }
+    );
+  } catch (err) {
+    console.error('Error en /api/experiment-runs/start:', err);
+    res.status(500).json({ error: 'Error del servidor' });
   }
-  
-  const prefsJson = JSON.stringify(prefs);
-  
-  db.run(
-    'UPDATE users SET preferences = ? WHERE id = ?',
-    [prefsJson, req.user.userId],
-    function(err) {
-      if (err) {
-        console.error('Error guardando preferencias:', err);
-        return res.status(500).json({ error: 'Error al guardar preferencias' });
-      }
-      res.json({ message: 'Preferencias guardadas' });
-    }
-  );
 });
-
-// ============ ENDPOINTS DE EXPERIMENTOS ============
-
-// Obtener experimentos del usuario
-app.get('/api/experiments', requireVerified, (req, res) => {
-  db.all(
-    'SELECT * FROM experiments WHERE userId = ? ORDER BY createdAt DESC',
-    [req.user.userId],
-    (err, experiments) => {
-      if (err) {
-        console.error('Error obteniendo experimentos:', err);
-        return res.status(500).json({ error: 'Error al obtener experimentos' });
-      }
-      res.json(experiments || []);
-    }
-  );
-});
-
-// Crear nuevo experimento
-app.post('/api/experiments', requireVerified, (req, res) => {
-  const { name, description } = req.body;
-  
-  if (!name || name.trim() === '') {
-    return res.status(400).json({ error: 'Nombre del experimento requerido' });
-  }
-  
-  db.run(
-    'INSERT INTO experiments (userId, name, description) VALUES (?, ?, ?)',
-    [req.user.userId, name.trim(), description || ''],
-    function(err) {
-      if (err) {
-        if (err.message.includes('UNIQUE')) {
-          return res.status(409).json({ error: 'Este experimento ya existe' });
-        }
-        console.error('Error creando experimento:', err);
-        return res.status(500).json({ error: 'Error al crear experimento' });
-      }
-      res.status(201).json({ id: this.lastID, userId: req.user.userId, name, description });
-    }
-  );
-});
-
-// Actualizar experimento
-app.put('/api/experiments/:id', requireVerified, (req, res) => {
-  const { name, description } = req.body;
-  
-  if (!name || name.trim() === '') {
-    return res.status(400).json({ error: 'Nombre del experimento requerido' });
-  }
-  
-  db.run(
-    'UPDATE experiments SET name = ?, description = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ? AND userId = ?',
-    [name.trim(), description || '', req.params.id, req.user.userId],
-    function(err) {
-      if (err) {
-        console.error('Error actualizando experimento:', err);
-        return res.status(500).json({ error: 'Error al actualizar experimento' });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Experimento no encontrado' });
-      }
-      res.json({ message: 'Experimento actualizado' });
-    }
-  );
-});
-
-// Eliminar experimento (y sus bloques)
-app.delete('/api/experiments/:id', requireVerified, (req, res) => {
-  db.run(
-    'DELETE FROM experiments WHERE id = ? AND userId = ?',
-    [req.params.id, req.user.userId],
-    function(err) {
-      if (err) {
-        console.error('Error eliminando experimento:', err);
-        return res.status(500).json({ error: 'Error al eliminar experimento' });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Experimento no encontrado' });
-      }
-      res.json({ message: 'Experimento eliminado' });
-    }
-  );
-});
-
-// ============ ENDPOINTS DE BLOQUES DE LECTURA ============
-
-// Obtener bloques de un experimento
-app.get('/api/experiments/:experimentId/blocks', requireVerified, (req, res) => {
-  db.all(
-    `SELECT rb.* FROM reading_blocks rb
-     JOIN experiments e ON rb.experimentId = e.id
-     WHERE rb.experimentId = ? AND e.userId = ?
-     ORDER BY rb.blockNumber ASC`,
-    [req.params.experimentId, req.user.userId],
-    (err, blocks) => {
-      if (err) {
-        console.error('Error obteniendo bloques:', err);
-        return res.status(500).json({ error: 'Error al obtener bloques' });
-      }
-      res.json(blocks || []);
-    }
-  );
-});
-
-// Crear nuevo bloque
-app.post('/api/experiments/:experimentId/blocks', requireVerified, (req, res) => {
-  const { blockNumber, name, duration, bookId, pageNumber } = req.body;
-  const { experimentId } = req.params;
-  
-  if (!blockNumber || !name || !duration) {
-    return res.status(400).json({ error: 'Datos del bloque incompletos' });
-  }
-  
-  // Verificar que el experimento pertenece al usuario
-  db.get(
-    'SELECT id FROM experiments WHERE id = ? AND userId = ?',
-    [experimentId, req.user.userId],
-    (err, experiment) => {
-      if (err || !experiment) {
-        return res.status(403).json({ error: 'No autorizado' });
-      }
-      
-      db.run(
-        'INSERT INTO reading_blocks (experimentId, blockNumber, name, duration, bookId, pageNumber) VALUES (?, ?, ?, ?, ?, ?)',
-        [experimentId, blockNumber, name, duration, bookId || null, pageNumber || 1],
-        function(err) {
-          if (err) {
-            console.error('Error creando bloque:', err);
-            return res.status(500).json({ error: 'Error al crear bloque' });
-          }
-          res.status(201).json({ 
-            id: this.lastID, 
-            experimentId, 
-            blockNumber, 
-            name, 
-            duration,
-            bookId: bookId || null,
-            pageNumber: pageNumber || 1
-          });
-        }
-      );
-    }
-  );
-});
-
-// Actualizar bloque
-app.put('/api/experiments/:experimentId/blocks/:blockId', requireVerified, (req, res) => {
-  const { name, duration, bookId, pageNumber } = req.body;
-  const { experimentId, blockId } = req.params;
-  
-  // Verificar que el experimento pertenece al usuario
-  db.get(
-    'SELECT id FROM experiments WHERE id = ? AND userId = ?',
-    [experimentId, req.user.userId],
-    (err, experiment) => {
-      if (err || !experiment) {
-        return res.status(403).json({ error: 'No autorizado' });
-      }
-      
-      db.run(
-        'UPDATE reading_blocks SET name = ?, duration = ?, bookId = ?, pageNumber = ? WHERE id = ? AND experimentId = ?',
-        [name, duration, bookId || null, pageNumber || 1, blockId, experimentId],
-        function(err) {
-          if (err) {
-            console.error('Error actualizando bloque:', err);
-            return res.status(500).json({ error: 'Error al actualizar bloque' });
-          }
-          if (this.changes === 0) {
-            return res.status(404).json({ error: 'Bloque no encontrado' });
-          }
-          res.json({ message: 'Bloque actualizado' });
-        }
-      );
-    }
-  );
-});
-
-// Eliminar bloque
-app.delete('/api/experiments/:experimentId/blocks/:blockId', requireVerified, (req, res) => {
-  const { experimentId, blockId } = req.params;
-  
-  // Verificar que el experimento pertenece al usuario
-  db.get(
-    'SELECT id FROM experiments WHERE id = ? AND userId = ?',
-    [experimentId, req.user.userId],
-    (err, experiment) => {
-      if (err || !experiment) {
-        return res.status(403).json({ error: 'No autorizado' });
-      }
-      
-      db.run(
-        'DELETE FROM reading_blocks WHERE id = ? AND experimentId = ?',
-        [blockId, experimentId],
-        function(err) {
-          if (err) {
-            console.error('Error eliminando bloque:', err);
-            return res.status(500).json({ error: 'Error al eliminar bloque' });
-          }
-          if (this.changes === 0) {
-            return res.status(404).json({ error: 'Bloque no encontrado' });
-          }
-          res.json({ message: 'Bloque eliminado' });
-        }
-      );
-    }
-  );
-});
-
-// ============ ENDPOINTS DE CONFIGURACIÓN DE BLOQUES ============
-
-// Obtener configuración de estímulos de un bloque
-app.get('/api/blocks/:blockId/stimuli-config', requireVerified, (req, res) => {
-  db.get(
-    `SELECT bsc.* FROM block_stimuli_config bsc
-     JOIN reading_blocks rb ON bsc.blockId = rb.id
-     JOIN experiments e ON rb.experimentId = e.id
-     WHERE bsc.blockId = ? AND e.userId = ?`,
-    [req.params.blockId, req.user.userId],
-    (err, config) => {
-      if (err) {
-        console.error('Error obteniendo configuración de estímulos:', err);
-        return res.status(500).json({ error: 'Error al obtener configuración' });
-      }
-      res.json(config || {});
-    }
-  );
-});
-
-// Guardar/actualizar configuración de estímulos
-app.post('/api/blocks/:blockId/stimuli-config', requireVerified, (req, res) => {
-  const { blockId } = req.params;
-  const { vibrationEnabled, auditoryEnabled, visualEnabled, extraStimuli, randomFrequency, frequencyCross } = req.body;
-  
-  // Verificar autorización
-  db.get(
-    `SELECT rb.id FROM reading_blocks rb
-     JOIN experiments e ON rb.experimentId = e.id
-     WHERE rb.id = ? AND e.userId = ?`,
-    [blockId, req.user.userId],
-    (err, block) => {
-      if (err || !block) {
-        return res.status(403).json({ error: 'No autorizado' });
-      }
-      
-      // Primero intentar insertar, si falla (unique constraint), actualizar
-      db.run(
-        `INSERT OR REPLACE INTO block_stimuli_config 
-         (blockId, vibrationEnabled, auditoryEnabled, visualEnabled, extraStimuli, randomFrequency, frequencyCross)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [blockId, vibrationEnabled ? 1 : 0, auditoryEnabled ? 1 : 0, visualEnabled ? 1 : 0, 
-         JSON.stringify(extraStimuli || []), randomFrequency || 1.0, frequencyCross ? 1 : 0],
-        function(err) {
-          if (err) {
-            console.error('Error guardando configuración de estímulos:', err);
-            return res.status(500).json({ error: 'Error al guardar configuración' });
-          }
-          res.json({ message: 'Configuración guardada' });
-        }
-      );
-    }
-  );
-});
-
-// ============ ENDPOINTS DE CORRIDAS DE EXPERIMENTOS ============
 
 // Crear una nueva corrida de experimento
 app.post('/api/experiment-runs', requireVerified, (req, res) => {
@@ -930,17 +915,19 @@ app.post('/api/experiment-runs', requireVerified, (req, res) => {
   
   // Verificar que el experimento pertenece al usuario
   db.get(
-    'SELECT id, name FROM experiments WHERE id = ? AND userId = ?',
+    'SELECT id, name FROM experiments WHERE id = ? AND user_id = ?',
     [experimentId, req.user.userId],
     (err, experiment) => {
       if (err || !experiment) {
         return res.status(403).json({ error: 'No autorizado' });
       }
       
+      const sessionId = `session_${experimentId}_${Date.now()}`;
+      
       db.run(
-        `INSERT INTO experiment_runs (experimentId, userId, totalBlocks, status, startTime)
+        `INSERT INTO experiment_runs (experiment_id, user_id, session_id, status, started_at)
          VALUES (?, ?, ?, 'in_progress', CURRENT_TIMESTAMP)`,
-        [experimentId, req.user.userId, totalBlocks],
+        [experimentId, req.user.userId, sessionId],
         function(err) {
           if (err) {
             console.error('Error creando corrida:', err);
@@ -964,18 +951,19 @@ app.post('/api/experiment-runs/blocks', requireVerified, (req, res) => {
   
   // Verificar autorización
   db.get(
-    'SELECT id FROM experiment_runs WHERE id = ? AND userId = ?',
+    'SELECT id FROM experiment_runs WHERE id = ? AND user_id = ?',
     [runId, req.user.userId],
     (err, run) => {
       if (err || !run) {
         return res.status(403).json({ error: 'No autorizado' });
       }
       
+      const now = new Date().toISOString();
       db.run(
         `INSERT INTO experiment_run_blocks 
-         (runId, blockId, blockNumber, bookId, pageNumber)
-         VALUES (?, ?, ?, ?, ?)`,
-        [runId, blockId, blockNumber, bookId, pageNumber],
+         (run_id, block_id, block_number, book_id, page_number, started_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [runId, blockId, blockNumber, bookId, pageNumber, now],
         function(err) {
           if (err) {
             console.error('Error creando run block:', err);
@@ -1000,8 +988,8 @@ app.put('/api/experiment-runs/blocks/:runBlockId/complete', requireVerified, (re
   // Verificar autorización
   db.get(
     `SELECT erb.* FROM experiment_run_blocks erb
-     JOIN experiment_runs er ON erb.runId = er.id
-     WHERE erb.id = ? AND er.userId = ?`,
+     JOIN experiment_runs er ON erb.run_id = er.id
+     WHERE erb.id = ? AND er.user_id = ?`,
     [runBlockId, req.user.userId],
     (err, runBlock) => {
       if (err || !runBlock) {
@@ -1009,14 +997,14 @@ app.put('/api/experiment-runs/blocks/:runBlockId/complete', requireVerified, (re
       }
       
       const now = new Date().toISOString();
-      const startTime = new Date(runBlock.startTime);
+      const startTime = new Date(runBlock.started_at);
       const duration = Math.floor((new Date(now) - startTime) / 1000);
       
       db.run(
         `UPDATE experiment_run_blocks 
-         SET endTime = ?, duration = ?
+         SET completed_at = ?
          WHERE id = ?`,
-        [now, duration, runBlockId],
+        [now, runBlockId],
         function(err) {
           if (err) {
             console.error('Error completando bloque:', err);
@@ -1047,7 +1035,7 @@ app.put('/api/experiment-runs/:runId/complete', requireVerified, (req, res) => {
   
   // Verificar autorización
   db.get(
-    'SELECT * FROM experiment_runs WHERE id = ? AND userId = ?',
+    'SELECT * FROM experiment_runs WHERE id = ? AND user_id = ?',
     [runId, req.user.userId],
     (err, run) => {
       if (err || !run) {
@@ -1055,12 +1043,12 @@ app.put('/api/experiment-runs/:runId/complete', requireVerified, (req, res) => {
       }
       
       const now = new Date().toISOString();
-      const startTime = new Date(run.startTime);
+      const startTime = new Date(run.started_at);
       const duration = Math.floor((new Date(now) - startTime) / 1000);
       
       db.run(
         `UPDATE experiment_runs
-         SET endTime = ?, duration = ?, status = 'completed'
+         SET completed_at = ?, duration_seconds = ?, status = 'completed'
          WHERE id = ?`,
         [now, duration, runId],
         function(err) {
@@ -1081,8 +1069,8 @@ app.put('/api/experiment-runs/:runId/cancel', requireVerified, (req, res) => {
   
   db.run(
     `UPDATE experiment_runs
-     SET status = 'cancelled', endTime = CURRENT_TIMESTAMP
-     WHERE id = ? AND userId = ?`,
+     SET status = 'cancelled', completed_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND user_id = ?`,
     [runId, req.user.userId],
     function(err) {
       if (err) {
@@ -1094,13 +1082,55 @@ app.put('/api/experiment-runs/:runId/cancel', requireVerified, (req, res) => {
   );
 });
 
+// Pausar experimento
+app.put('/api/experiment-runs/:runId/pause', requireVerified, (req, res) => {
+  const { runId } = req.params;
+  
+  console.log('[API] Pausa solicitada para runId:', runId);
+  
+  db.run(
+    `UPDATE experiment_runs
+     SET status = 'paused'
+     WHERE id = ? AND user_id = ?`,
+    [runId, req.user.userId],
+    function(err) {
+      if (err) {
+        console.error('Error pausando corrida:', err);
+        return res.status(500).json({ error: 'Error al pausar corrida' });
+      }
+      res.json({ message: 'Corrida pausada', runId });
+    }
+  );
+});
+
+// Reanudar experimento
+app.put('/api/experiment-runs/:runId/resume', requireVerified, (req, res) => {
+  const { runId } = req.params;
+  
+  console.log('[API] Reanudación solicitada para runId:', runId);
+  
+  db.run(
+    `UPDATE experiment_runs
+     SET status = 'running'
+     WHERE id = ? AND user_id = ?`,
+    [runId, req.user.userId],
+    function(err) {
+      if (err) {
+        console.error('Error reanudando corrida:', err);
+        return res.status(500).json({ error: 'Error al reanudar corrida' });
+      }
+      res.json({ message: 'Corrida reanudada', runId });
+    }
+  );
+});
+
 // Guardar datos capturados durante el experimento
 app.post('/api/experiment-runs/data', requireVerified, (req, res) => {
   const { runId, runBlockId, dataType, data } = req.body;
   
   // Verificar autorización
   db.get(
-    'SELECT id FROM experiment_runs WHERE id = ? AND userId = ?',
+    'SELECT id FROM experiment_runs WHERE id = ? AND user_id = ?',
     [runId, req.user.userId],
     (err, run) => {
       if (err || !run) {
@@ -1129,8 +1159,8 @@ app.get('/api/experiments/:experimentId/runs', requireVerified, (req, res) => {
   
   db.all(
     `SELECT * FROM experiment_runs
-     WHERE experimentId = ? AND userId = ?
-     ORDER BY startTime DESC`,
+     WHERE experiment_id = ? AND user_id = ?
+     ORDER BY started_at DESC`,
     [experimentId, req.user.userId],
     (err, runs) => {
       if (err) {
@@ -1150,8 +1180,8 @@ app.get('/api/experiment-runs/:runId', requireVerified, (req, res) => {
   db.get(
     `SELECT er.*, e.name as experimentName, e.description as experimentDescription
      FROM experiment_runs er
-     JOIN experiments e ON er.experimentId = e.id
-     WHERE er.id = ? AND er.userId = ?`,
+     JOIN experiments e ON er.experiment_id = e.id
+     WHERE er.id = ? AND er.user_id = ?`,
     [runId, req.user.userId],
     (err, run) => {
       if (err || !run) {
@@ -1229,6 +1259,617 @@ app.post('/api/auth/verify-password', requireVerified, async (req, res) => {
   }
 });
 
+// ============ PROXY FLASK PARA EXPERIMENTOS ============
+// Las rutas de experimentos se proxyean a Flask en puerto 5000
+const FLASK_URL = 'http://localhost:5000';
+
+// Helper para hacer requests a Flask
+async function proxyToFlask(method, endpoint, body = null, authToken = null) {
+  try {
+    const options = {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    };
+
+    if (authToken) {
+      options.headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(`${FLASK_URL}${endpoint}`, options);
+    
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Flask error ${response.status}: ${error}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    // Silenciar logs de proxy si Flask no está disponible (normal en desarrollo)
+    throw error;
+  }
+}
+
+// ============ RUTAS CRUD PARA EXPERIMENTOS (Nueva BD) ============
+
+// GET - Listar experimentos del usuario (SOLO no eliminados - soft delete)
+app.get('/api/experiments-v2/list', requireVerified, (req, res) => {
+  try {
+    db.all(
+      `SELECT id, name, description, config, created_at as createdAt, updated_at as updatedAt
+       FROM experiments
+       WHERE user_id = ? AND deleted_at IS NULL
+       ORDER BY updated_at DESC`,
+      [req.user.userId],
+      (err, rows) => {
+        if (err) {
+          console.error('Error al listar experimentos:', err.message);
+          return res.status(500).json({ error: 'Error al listar experimentos' });
+        }
+        
+        // Parsear config JSON
+        const experiments = rows.map(row => ({
+          ...row,
+          config: row.config ? JSON.parse(row.config) : {}
+        }));
+        
+        res.json(experiments);
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Error al listar experimentos' });
+  }
+});
+
+// GET - Listar experimentos eliminados (papelera - soft delete)
+app.get('/api/experiments-v2/trash', requireVerified, (req, res) => {
+  try {
+    db.all(
+      `SELECT id, name, description, config, created_at as createdAt, updated_at as updatedAt, deleted_at as deletedAt
+       FROM experiments
+       WHERE user_id = ? AND deleted_at IS NOT NULL
+       ORDER BY deleted_at DESC`,
+      [req.user.userId],
+      (err, rows) => {
+        if (err) {
+          console.error('Error al listar papelera:', err.message);
+          return res.status(500).json({ error: 'Error al listar papelera' });
+        }
+        
+        // Parsear config JSON
+        const experiments = rows.map(row => ({
+          ...row,
+          config: row.config ? JSON.parse(row.config) : {}
+        }));
+        
+        res.json(experiments);
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Error al listar papelera' });
+  }
+});
+
+// POST - Crear nuevo experimento
+app.post('/api/experiments-v2/create', requireVerified, (req, res) => {
+  const { name, description, config } = req.body;
+  
+  // Validar nombre
+  if (!name || !name.trim()) {
+    console.error('❌ ERROR: CREATE experiment sin nombre');
+    return res.status(400).json({ error: 'El nombre del experimento es requerido' });
+  }
+
+  // Validar config
+  if (!config) {
+    console.error('❌ ERROR: CREATE experiment sin config. Config es requerida con num_blocks y minutes_per_block');
+    return res.status(400).json({ error: 'Config con num_blocks y minutes_per_block es requerida' });
+  }
+
+  // Validar propiedades requeridas en config
+  if (typeof config.num_blocks !== 'number' || config.num_blocks < 1) {
+    console.error('❌ ERROR: CREATE experiment - config.num_blocks inválido:', config.num_blocks);
+    return res.status(400).json({ error: 'config.num_blocks debe ser número >= 1' });
+  }
+
+  if (typeof config.minutes_per_block !== 'number' || config.minutes_per_block <= 0) {
+    console.error('❌ ERROR: CREATE experiment - config.minutes_per_block inválido:', config.minutes_per_block);
+    return res.status(400).json({ error: 'config.minutes_per_block debe ser número > 0' });
+  }
+
+  try {
+    const configJSON = JSON.stringify(config);
+
+    db.run(
+      `INSERT INTO experiments (user_id, name, description, config, created_at, updated_at)
+       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [req.user.userId, name.trim(), description || '', configJSON],
+      function(err) {
+        if (err) {
+          console.error('❌ ERROR INSERT experiment:', err);
+          return res.status(500).json({ error: 'Error al crear experimento' });
+        }
+
+        db.get(
+          'SELECT * FROM experiments WHERE id = ?',
+          [this.lastID],
+          (err, row) => {
+            if (err) {
+              console.error('❌ ERROR SELECT experimento creado:', err);
+              return res.status(500).json({ error: 'Error al obtener experimento creado' });
+            }
+            res.json({
+              ...row,
+              config: JSON.parse(row.config)
+            });
+          }
+        );
+      }
+    );
+  } catch (error) {
+    console.error('❌ ERROR en POST /api/experiments-v2/create:', error);
+    res.status(500).json({ error: 'Error al crear experimento' });
+  }
+});
+
+// PUT - Actualizar experimento
+app.put('/api/experiments-v2/:id', requireVerified, (req, res) => {
+  const { id } = req.params;
+  const { name, description, config } = req.body;
+
+  // Validar que id existe
+  if (!id) {
+    console.error('❌ ERROR PUT experiment sin id');
+    return res.status(400).json({ error: 'ID del experimento es requerido' });
+  }
+
+  // Validar config si se proporciona
+  if (config !== undefined && !config) {
+    console.error('❌ ERROR PUT experiment con config vacío');
+    return res.status(400).json({ error: 'Config no puede ser vacío' });
+  }
+
+  try {
+    // Si config no se proporciona, NO actualizar (dejar el existente)
+    let configJSON = undefined;
+    if (config !== undefined) {
+      configJSON = JSON.stringify(config);
+    }
+
+    // Construir UPDATE dinámicamente basado en qué se proporciona
+    let updateFields = [];
+    let updateValues = [];
+    
+    if (name !== undefined) {
+      updateFields.push('name = ?');
+      updateValues.push(name);
+    }
+    if (description !== undefined) {
+      updateFields.push('description = ?');
+      updateValues.push(description);
+    }
+    if (configJSON !== undefined) {
+      updateFields.push('config = ?');
+      updateValues.push(configJSON);
+    }
+
+    if (updateFields.length === 0) {
+      console.error('❌ ERROR PUT experiment sin campos para actualizar');
+      return res.status(400).json({ error: 'Al menos un campo (name, description, config) es requerido' });
+    }
+
+    updateFields.push('updated_at = CURRENT_TIMESTAMP');
+    updateValues.push(id);
+    updateValues.push(req.user.userId);
+
+    const updateSQL = `UPDATE experiments
+       SET ${updateFields.join(', ')}
+       WHERE id = ? AND user_id = ? AND deleted_at IS NULL`;
+
+    db.run(updateSQL, updateValues, function(err) {
+        if (err) {
+          console.error('❌ ERROR UPDATE experiment:', err);
+          return res.status(500).json({ error: 'Error al actualizar experimento' });
+        }
+
+        if (this.changes === 0) {
+          console.error('❌ ERROR: Experimento no encontrado o ya eliminado:', id);
+          return res.status(404).json({ error: 'Experimento no encontrado' });
+        }
+
+        db.get(
+          'SELECT * FROM experiments WHERE id = ?',
+          [id],
+          (err, row) => {
+            if (err) {
+              return res.status(500).json({ error: 'Error al obtener experimento actualizado' });
+            }
+            res.json({
+              ...row,
+              config: JSON.parse(row.config)
+            });
+          }
+        );
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar experimento' });
+  }
+});
+
+// DELETE - SOFT DELETE: marcar como eliminado (no borrar físicamente)
+app.delete('/api/experiments-v2/:id', requireVerified, (req, res) => {
+  const { id } = req.params;
+
+  try {
+    db.run(
+      `UPDATE experiments
+       SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?
+       WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+      [req.user.userId, id, req.user.userId],
+      function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'Error al eliminar experimento' });
+        }
+
+        if (this.changes === 0) {
+          return res.status(404).json({ error: 'Experimento no encontrado o ya eliminado' });
+        }
+
+        // Verificar papelera: máximo 5 experimentos. Si hay más, borrar el más antiguo (FIFO)
+        db.get(
+          `SELECT COUNT(*) as count FROM experiments WHERE user_id = ? AND deleted_at IS NOT NULL`,
+          [req.user.userId],
+          (err, result) => {
+            if (err || !result) {
+              console.log('[PAPELERA] Error contando experimentos eliminados:', err);
+              return res.json({ success: true, message: 'Experimento movido a papelera' });
+            }
+
+            console.log('[PAPELERA] Count actual:', result.count, 'para usuario:', req.user.userId);
+
+            if (result.count >= 5) {
+              // FIFO: si ya hay 5 o más, borrar el más antiguo ANTES de permitir más
+              db.get(
+                `SELECT id FROM experiments WHERE user_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at ASC LIMIT 1`,
+                [req.user.userId],
+                (err, oldestExp) => {
+                  if (err || !oldestExp) {
+                    console.log('[PAPELERA] No se encontró experimento antiguo para borrar');
+                    return res.json({ success: true, message: 'Experimento movido a papelera (Máximo alcanzado)' });
+                  }
+
+                  // Borrar completamente el más antiguo
+                  console.log('[PAPELERA] Borrando experimento antiguo:', oldestExp.id);
+                  db.run(
+                    `DELETE FROM experiments WHERE id = ? AND user_id = ?`,
+                    [oldestExp.id, req.user.userId],
+                    (err) => {
+                      if (err) {
+                        console.error('[PAPELERA] Error eliminando experimento antiguo:', err);
+                      } else {
+                        console.log('[PAPELERA] Experimento antiguo eliminado exitosamente');
+                      }
+                      res.json({ success: true, message: 'Experimento movido a papelera (Se eliminó el más antiguo)' });
+                    }
+                  );
+                }
+              );
+            } else {
+              console.log('[PAPELERA] Espacio disponible en papelera, count:', result.count);
+              res.json({ success: true, message: 'Experimento movido a papelera' });
+            }
+          }
+        );
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar experimento' });
+  }
+});
+
+// POST - Restaurar de papelera (soft delete reversal)
+app.post('/api/experiments-v2/:id/restore', requireVerified, (req, res) => {
+  const { id } = req.params;
+
+  try {
+    db.run(
+      `UPDATE experiments
+       SET deleted_at = NULL, deleted_by = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`,
+      [id, req.user.userId],
+      function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'Error al restaurar experimento' });
+        }
+
+        if (this.changes === 0) {
+          return res.status(404).json({ error: 'Experimento no encontrado en papelera' });
+        }
+
+        db.get(
+          'SELECT * FROM experiments WHERE id = ?',
+          [id],
+          (err, row) => {
+            if (err) {
+              return res.status(500).json({ error: 'Error al obtener experimento restaurado' });
+            }
+            res.json({
+              ...row,
+              config: JSON.parse(row.config)
+            });
+          }
+        );
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Error al restaurar experimento' });
+  }
+});
+
+// DELETE - ELIMINAR PERMANENTEMENTE (borrar de papelera completamente)
+app.delete('/api/experiments-v2/:id/permanently-delete', requireVerified, (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Verificar que solo se puede eliminar experimentos de este usuario Y que estén en papelera
+    db.run(
+      `DELETE FROM experiments
+       WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`,
+      [id, req.user.userId],
+      function(err) {
+        if (err) {
+          console.error('Error eliminando permanentemente:', err);
+          return res.status(500).json({ error: 'Error al eliminar permanentemente' });
+        }
+
+        if (this.changes === 0) {
+          return res.status(404).json({ error: 'Experimento no encontrado en papelera' });
+        }
+
+        console.log('[PAPELERA] Eliminado permanentemente:', id);
+        res.json({ success: true, message: 'Experimento eliminado permanentemente de papelera' });
+      }
+    );
+  } catch (error) {
+    console.error('[PAPELERA] Error en permanently-delete:', error);
+    res.status(500).json({ error: 'Error al eliminar permanentemente' });
+  }
+});
+
+// GET - Obtener experimento por ID (excluir eliminados)
+app.get('/api/experiments-v2/:id', requireVerified, (req, res) => {
+  const { id } = req.params;
+
+  try {
+    db.get(
+      `SELECT * FROM experiments
+       WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+      [id, req.user.userId],
+      (err, row) => {
+        if (err) {
+          return res.status(500).json({ error: 'Error al obtener experimento' });
+        }
+
+        if (!row) {
+          return res.status(404).json({ error: 'Experimento no encontrado' });
+        }
+
+        res.json({
+          ...row,
+          config: JSON.parse(row.config)
+        });
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener experimento' });
+  }
+});
+
+// BLOQUES: Se generan automáticamente desde config.num_blocks
+// No se guardan en BD, se calculan en tiempo de ejecución
+
+// ============ RUTAS DE EJECUCIONES (Runs) ============
+
+// GET - Listar runs de un experimento
+app.get('/api/experiments-v2/:experimentId/runs', requireVerified, (req, res) => {
+  const { experimentId } = req.params;
+
+  try {
+    db.all(
+      `SELECT er.* FROM experiment_runs er
+       JOIN experiments e ON er.experiment_id = e.id
+       WHERE er.experiment_id = ? AND e.user_id = ? AND e.deleted_at IS NULL
+       ORDER BY er.started_at DESC`,
+      [experimentId, req.user.userId],
+      (err, rows) => {
+        if (err) {
+          return res.status(500).json({ error: 'Error al listar runs' });
+        }
+        res.json(rows || []);
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Error al listar runs' });
+  }
+});
+
+// GET - Obtener detalles de un run
+app.get('/api/experiments-v2/runs/:runId', requireVerified, (req, res) => {
+  const { runId } = req.params;
+
+  try {
+    db.get(
+      `SELECT er.* FROM experiment_runs er
+       JOIN experiments e ON er.experiment_id = e.id
+       WHERE er.id = ? AND e.user_id = ?`,
+      [runId, req.user.userId],
+      (err, row) => {
+        if (err) {
+          return res.status(500).json({ error: 'Error al obtener run' });
+        }
+
+        if (!row) {
+          return res.status(404).json({ error: 'Run no encontrado' });
+        }
+
+        // Obtener assets asociados
+        db.all(
+          'SELECT * FROM run_assets WHERE run_id = ?',
+          [runId],
+          (err, assets) => {
+            if (err) {
+              return res.status(500).json({ error: 'Error al obtener assets' });
+            }
+
+            res.json({
+              ...row,
+              assets: assets || []
+            });
+          }
+        );
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener run' });
+  }
+});
+
+// ============ RUTAS DE EXPORTACIÓN ============
+
+// GET - Exportar CSV de eventos
+app.get('/api/experiments-v2/runs/:runId/export-csv', requireVerified, (req, res) => {
+  const { runId } = req.params;
+
+  try {
+    // Obtener todos los eventos del run
+    db.all(
+      `SELECT * FROM run_events WHERE run_id = ? ORDER BY timestamp_ms ASC`,
+      [runId],
+      (err, events) => {
+        if (err) {
+          return res.status(500).json({ error: 'Error al obtener eventos' });
+        }
+
+        if (!events || events.length === 0) {
+          return res.status(404).json({ error: 'No hay eventos para exportar' });
+        }
+
+        // Crear CSV
+        let csv = 'timestamp_ms,block_number,event_type,data\n';
+        events.forEach(event => {
+          csv += `${event.timestamp_ms},${event.block_number},${event.event_type},"${(event.data || '').replace(/"/g, '""')}"\n`;
+        });
+
+        // Retornar como descarga
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="run_${runId}_events.csv"`);
+        res.send(csv);
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Error al exportar CSV' });
+  }
+});
+
+// ============ RUTAS DE FLASK PROXY (para compatibilidad) ============
+
+// GET - Obtener configuración del experimento actual
+app.get('/api/experiment/config', requireVerified, async (req, res) => {
+  try {
+    const data = await proxyToFlask('GET', '/api/experiment/config', null, req.headers.authorization?.substring(7));
+    res.json(data);
+  } catch (error) {
+    // Si Flask no está disponible, retornar config por defecto
+    console.log('⚠️  Flask no disponible, usando configuración por defecto');
+    res.json({
+      config: {
+        num_blocks: 5,
+        minutes_per_block: 5.22,
+        quotas: { V: 2, K: 2, A: 2, PST: 3, PFT: 6 },
+        stim_blocks: [0, 2, 4]
+      }
+    });
+  }
+});
+
+// POST - Establecer configuración del experimento
+app.post('/api/experiment/config', requireVerified, async (req, res) => {
+  try {
+    const data = await proxyToFlask('POST', '/api/experiment/config', req.body, req.headers.authorization?.substring(7));
+    res.json(data);
+  } catch (error) {
+    // Si Flask no está disponible, simplemente confirmar que se guardó
+    console.log('⚠️  Flask no disponible, configuración guardada localmente');
+    res.json({ success: true, message: 'Configuración guardada' });
+  }
+});
+
+// POST - Iniciar experimento (lanza lector.py)
+app.post('/api/experiment/start', requireVerified, async (req, res) => {
+  try {
+    const data = await proxyToFlask('POST', '/api/experiment/start', req.body, req.headers.authorization?.substring(7));
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Error iniciando experimento' });
+  }
+});
+
+// POST - Detener experimento
+app.post('/api/experiment/stop', requireVerified, async (req, res) => {
+  try {
+    const data = await proxyToFlask('POST', '/api/experiment/stop', null, req.headers.authorization?.substring(7));
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Error deteniendo experimento' });
+  }
+});
+
+// GET - Obtener estado del experimento
+app.get('/api/experiment/status', requireVerified, async (req, res) => {
+  try {
+    const data = await proxyToFlask('GET', '/api/experiment/status', null, req.headers.authorization?.substring(7));
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo estado del experimento' });
+  }
+});
+
+// GET - Listar sesiones de experimento
+app.get('/api/experiment/sessions', requireVerified, async (req, res) => {
+  try {
+    const data = await proxyToFlask('GET', '/api/experiment/sessions', null, req.headers.authorization?.substring(7));
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo sesiones de experimento' });
+  }
+});
+
+// GET - Obtener datos de una sesión
+app.get('/api/experiment/session/:name/data', requireVerified, async (req, res) => {
+  try {
+    const data = await proxyToFlask('GET', `/api/experiment/session/${req.params.name}/data`, null, req.headers.authorization?.substring(7));
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo datos de sesión' });
+  }
+});
+
+// GET - Health check de Flask
+app.get('/api/experiment/health', async (req, res) => {
+  try {
+    const data = await proxyToFlask('GET', '/api/health');
+    res.json(data);
+  } catch (error) {
+    res.status(503).json({ error: 'Flask server no disponible', status: 'disconnected' });
+  }
+});
+
 // Configuración de directorios
 const recordingsDir = path.join(__dirname, 'camera-recorder-app', 'server', 'recordings');
 const librosPath = path.join(__dirname, 'public', 'libros');
@@ -1256,6 +1897,12 @@ server.requestTimeout = 3000; // Timeout para requests (3 segundos)
 
 // Mantener track de todas las conexiones activas para poder cerrarlas
 const activeConnections = new Set();
+
+// Variables de Gazepoint (para limpiar en shutdown)
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+let txtStream = null;
+let gazepointStream = null;
 
 server.on('connection', (socket) => {
   activeConnections.add(socket);
@@ -1379,6 +2026,126 @@ app.get('/api/books', (req, res) => {
   });
 });
 
+// ============ ENDPOINT PARA SERVIR EPUBS CON CORS COMPLETO ============
+app.get('/api/epub/:filename', (req, res) => {
+  const { filename } = req.params;
+  
+  // Validar que sea un archivo válido (evitar path traversal)
+  if (!filename.match(/^[a-zA-Z0-9\s\-_.()]+\.epub$/i)) {
+    return res.status(400).json({ error: 'Nombre de archivo inválido' });
+  }
+  
+  const filePath = path.join(librosPath, filename);
+  
+  // Verificar que el archivo existe y está dentro de la carpeta de libros
+  if (!filePath.startsWith(librosPath)) {
+    return res.status(403).json({ error: 'Acceso denegado' });
+  }
+  
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'Archivo no encontrado' });
+  }
+  
+  console.log('[server] Sirviendo EPUB:', filename);
+  
+  try {
+    const stats = fs.statSync(filePath);
+    const fileSize = stats.size;
+    
+    // Headers CORS y Content-Type
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Range');
+    res.set('Content-Type', 'application/epub+zip');
+    res.set('Content-Length', fileSize);
+    res.set('Accept-Ranges', 'bytes');
+    res.set('Cache-Control', 'public, max-age=3600');
+    
+    // Soportar Range requests para que epubjs pueda acceder parcialmente al ZIP
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = (end - start) + 1;
+      
+      console.log(`[server] Range request: bytes=${start}-${end}/${fileSize}`);
+      
+      res.status(206);
+      res.set('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+      res.set('Content-Length', chunksize);
+      
+      const stream = fs.createReadStream(filePath, { start, end });
+      stream.pipe(res);
+    } else {
+      // Sin Range: servir el archivo completo
+      res.set('Content-Length', fileSize);
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
+    }
+  } catch (err) {
+    console.error('[server] Error sirviendo EPUB:', err);
+    res.status(500).json({ error: 'Error sirviendo el archivo', details: err.message });
+  }
+});
+
+// ============ API: ARCHIVOS DE SESIÓN ============
+app.get('/api/sesion-file/:sesion/:filename', (req, res) => {
+  const { sesion, filename } = req.params;
+  
+  // Validar que sea un nombre válido (evitar path traversal)
+  if (!sesion.match(/^S\d+$/) || !filename.match(/^S\d+_.*\.(mp4|wav|csv)$/i)) {
+    return res.status(400).json({ error: 'Nombre de archivo inválido' });
+  }
+  
+  const filePath = path.join(__dirname, 'src', 'Sesiones', sesion, filename);
+  
+  // Verificar que el archivo existe
+  if (!fs.existsSync(filePath)) {
+    console.log(`⚠️  Archivo no encontrado: ${filePath}`);
+    return res.status(404).json({ error: 'Archivo no encontrado' });
+  }
+  
+  // Determinar el tipo MIME
+  const ext = path.extname(filename).toLowerCase();
+  let contentType = 'application/octet-stream';
+  
+  if (ext === '.mp4') contentType = 'video/mp4';
+  else if (ext === '.wav') contentType = 'audio/wav';
+  else if (ext === '.csv') contentType = 'text/csv';
+  
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Accept-Ranges', 'bytes');
+  
+  // Para videos, soportar range requests
+  if (ext === '.mp4') {
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+    
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunkSize = end - start + 1;
+      
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Content-Length': chunkSize,
+        'Content-Type': contentType
+      });
+      
+      fs.createReadStream(filePath, { start, end }).pipe(res);
+    } else {
+      res.writeHead(200, { 'Content-Length': fileSize });
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } else {
+    // Para otros archivos
+    fs.createReadStream(filePath).pipe(res);
+  }
+});
+
 // ============ FUNCIONES AUXILIARES ============
 function findSessionFolder(sessionId) {
   const sessionFolderName = sessionId.replace('Z', '');
@@ -1444,9 +2211,316 @@ app.post('/api/upload', upload.single('video'), async (req, res) => {
   }
 });
 
+// ============ ENDPOINTS DE DATOS PARA RESULTADOS ============
+
+// GET gaze data - Datos de seguimiento ocular
+// Segregación: Solo retorna si el usuario creó el experimento
+app.get('/api/session/:runId/data/gaze', requireVerified, (req, res) => {
+  const { runId } = req.params;
+  const page = parseInt(req.query.page) || 0;
+  const limit = parseInt(req.query.limit) || 100;
+  const offset = page * limit;
+
+  // Verificar que el usuario es propietario del experimento
+  db.all(
+    `SELECT gs.id, gs.run_id, gs.timestamp_ms, gs.x_px, gs.y_px, gs.confidence, gs.block_number, gs.page_number, gs.validity
+     FROM gaze_samples gs
+     JOIN experiment_runs er ON gs.run_id = er.id
+     JOIN experiments e ON er.experiment_id = e.id
+     WHERE gs.run_id = ? AND e.user_id = ?
+     ORDER BY gs.timestamp_ms ASC 
+     LIMIT ? OFFSET ?`,
+    [runId, req.user.userId, limit, offset],
+    (err, rows) => {
+      if (err) {
+        console.error('Error fetching gaze:', err);
+        return res.status(500).json({ error: 'Error cargando datos' });
+      }
+      res.json({ data: rows, page, limit });
+    }
+  );
+});
+
+// GET events data - Mind wandering events
+// Segregación: Solo retorna si el usuario creó el experimento
+app.get('/api/session/:runId/data/events', requireVerified, (req, res) => {
+  const { runId } = req.params;
+
+  db.all(
+    `SELECT mwe.id, mwe.run_id, mwe.block_number, mwe.event_type, 
+            mwe.event_timestamp_ms as timestamp_ms, mwe.duration_ms, mwe.confidence,
+            mwe.timestamp_end_ms, mwe.event_id, mwe.description
+     FROM mind_wandering_events mwe
+     JOIN experiment_runs er ON mwe.run_id = er.id
+     JOIN experiments e ON er.experiment_id = e.id
+     WHERE mwe.run_id = ? AND e.user_id = ?
+     ORDER BY mwe.event_timestamp_ms ASC`,
+    [runId, req.user.userId],
+    (err, rows) => {
+      if (err) {
+        console.error('Error fetching events:', err);
+        return res.status(500).json({ error: 'Error cargando eventos' });
+      }
+      res.json({ data: rows });
+    }
+  );
+});
+
+// GET meta data (resumen)
+app.get('/api/session/:runId/data/meta', requireVerified, (req, res) => {
+  const { runId } = req.params;
+
+  db.get(
+    `SELECT 
+       er.id, er.session_id, er.status, er.created_at,
+       COUNT(DISTINCT gs.id) as gaze_count,
+       COUNT(DISTINCT re.id) as event_count
+     FROM experiment_runs er
+     LEFT JOIN gaze_samples gs ON er.id = gs.run_id
+     LEFT JOIN run_events re ON er.id = re.run_id
+     WHERE er.id = ?
+     GROUP BY er.id`,
+    [runId],
+    (err, row) => {
+      if (err) {
+        console.error('Error fetching meta:', err);
+        return res.status(500).json({ error: 'Error cargando metadata' });
+      }
+      res.json(row || {});
+    }
+  );
+});
+
+// GET videos/assets
+app.get('/api/session/:runId/videos', requireVerified, (req, res) => {
+  const { runId } = req.params;
+  const fs = require('fs');
+  const path = require('path');
+
+  db.all(
+    `SELECT id, run_id, asset_type, asset_path, block_number 
+     FROM run_assets 
+     WHERE run_id = ? AND asset_type = 'video'
+     ORDER BY block_number ASC`,
+    [runId],
+    (err, rows) => {
+      if (err) {
+        console.error('Error fetching videos:', err);
+        return res.status(500).json({ error: 'Error cargando videos' });
+      }
+      
+      // Calcular tamaño de archivo para cada video
+      const videosWithSize = rows.map(row => {
+        try {
+          const filePath = path.resolve(row.asset_path);
+          const stats = fs.statSync(filePath);
+          const sizeMB = (stats.size / (1024 * 1024)).toFixed(2);
+          return { ...row, size_mb: parseFloat(sizeMB) };
+        } catch (err) {
+          console.warn(`No se pudo obtener tamaño de ${row.asset_path}:`, err.message);
+          return { ...row, size_mb: 0 };
+        }
+      });
+      
+      res.json({ videos: videosWithSize });
+    }
+  );
+});
+
+// GET - Descargar o servir video específico
+app.get('/api/session/:runId/download-video', requireVerified, (req, res) => {
+  const { runId } = req.params;
+  const { block } = req.query;
+
+  if (!block) {
+    return res.status(400).json({ error: 'Bloque requerido' });
+  }
+
+  db.get(
+    `SELECT asset_path FROM run_assets 
+     WHERE run_id = ? AND block_number = ? AND asset_type = 'video'
+     LIMIT 1`,
+    [runId, parseInt(block)],
+    (err, row) => {
+      if (err) {
+        console.error('Error fetching video:', err);
+        return res.status(500).json({ error: 'Error cargando video' });
+      }
+
+      if (!row) {
+        return res.status(404).json({ error: 'Video no encontrado' });
+      }
+
+      const videoPath = path.join(__dirname, row.asset_path);
+
+      // Verificar que el archivo existe
+      if (!fs.existsSync(videoPath)) {
+        console.error('Archivo de video no existe:', videoPath);
+        return res.status(404).json({ error: 'Archivo de video no encontrado' });
+      }
+
+      // Servir el archivo con range support (para streaming)
+      const stat = fs.statSync(videoPath);
+      const fileSize = stat.size;
+      const range = req.headers.range;
+
+      if (range) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunksize = end - start + 1;
+
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunksize,
+          'Content-Type': 'video/mp4',
+          'Access-Control-Allow-Origin': '*'
+        });
+
+        fs.createReadStream(videoPath, { start, end }).pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Content-Length': fileSize,
+          'Content-Type': 'video/mp4',
+          'Access-Control-Allow-Origin': '*'
+        });
+
+        fs.createReadStream(videoPath).pipe(res);
+      }
+    }
+  );
+});
+
+// GET - Stream video (alias para download-video)
+app.get('/api/session/:runId/video-stream', requireVerified, (req, res) => {
+  // Redirigir o usar la misma lógica que download-video
+  const { runId } = req.params;
+  const { block } = req.query;
+
+  if (!block) {
+    return res.status(400).json({ error: 'Bloque requerido' });
+  }
+
+
+// ===== Session control endpoints (pause/resume/abort) =====
+// These endpoints are lightweight helpers used by the front-end keyboard handlers.
+app.post('/api/session/:runId/pause', requireVerified, (req, res) => {
+  const { runId } = req.params;
+  // Intentar actualizar por user_id o userId (compatibilidad)
+  db.run(
+    `UPDATE experiment_runs SET status = 'paused' WHERE id = ? AND (user_id = ? OR userId = ?)`,
+    [runId, req.user.userId, req.user.userId],
+    function(err) {
+      if (err) {
+        console.error('Error pausando corrida:', err);
+        return res.status(500).json({ error: 'Error al pausar' });
+      }
+      if (this.changes === 0) return res.status(404).json({ error: 'Corrida no encontrada o no autorizada' });
+      res.json({ ok: true, message: 'paused' });
+    }
+  );
+});
+
+app.post('/api/session/:runId/resume', requireVerified, (req, res) => {
+  const { runId } = req.params;
+  db.run(
+    `UPDATE experiment_runs SET status = 'in_progress' WHERE id = ? AND (user_id = ? OR userId = ?)`,
+    [runId, req.user.userId, req.user.userId],
+    function(err) {
+      if (err) {
+        console.error('Error reanudando corrida:', err);
+        return res.status(500).json({ error: 'Error al reanudar' });
+      }
+      if (this.changes === 0) return res.status(404).json({ error: 'Corrida no encontrada o no autorizada' });
+      res.json({ ok: true, message: 'resumed' });
+    }
+  );
+});
+
+app.post('/api/session/:runId/abort', requireVerified, (req, res) => {
+  const { runId } = req.params;
+  db.run(
+    `UPDATE experiment_runs SET status = 'cancelled', completed_at = CURRENT_TIMESTAMP WHERE id = ? AND (user_id = ? OR userId = ?)`,
+    [runId, req.user.userId, req.user.userId],
+    function(err) {
+      if (err) {
+        console.error('Error abortando corrida:', err);
+        return res.status(500).json({ error: 'Error al abortar' });
+      }
+      if (this.changes === 0) return res.status(404).json({ error: 'Corrida no encontrada o no autorizada' });
+      res.json({ ok: true, message: 'aborted' });
+    }
+  );
+});
+  db.get(
+    `SELECT asset_path FROM run_assets 
+     WHERE run_id = ? AND block_number = ? AND asset_type = 'video'
+     LIMIT 1`,
+    [runId, parseInt(block)],
+    (err, row) => {
+      if (err) {
+        console.error('Error fetching video stream:', err);
+        return res.status(500).json({ error: 'Error cargando video' });
+      }
+
+      if (!row) {
+        return res.status(404).json({ error: 'Video no encontrado' });
+      }
+
+      const videoPath = path.join(__dirname, row.asset_path);
+
+      // Verificar que el archivo existe
+      if (!fs.existsSync(videoPath)) {
+        console.error('Archivo de video no existe:', videoPath);
+        return res.status(404).json({ error: 'Archivo de video no encontrado' });
+      }
+
+      // Servir el archivo con range support
+      const stat = fs.statSync(videoPath);
+      const fileSize = stat.size;
+      const range = req.headers.range;
+
+      if (range) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunksize = end - start + 1;
+
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunksize,
+          'Content-Type': 'video/mp4'
+        });
+
+        fs.createReadStream(videoPath, { start, end }).pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Content-Length': fileSize,
+          'Content-Type': 'video/mp4'
+        });
+
+        fs.createReadStream(videoPath).pipe(res);
+      }
+    }
+  );
+});
+
 // ============ RUTA CATCH-ALL (SPA) ============
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+  const indexPath = path.join(__dirname, 'build', 'index.html');
+  
+  // Verificar que el archivo existe antes de intentar enviarlo
+  if (!fs.existsSync(indexPath)) {
+    console.warn('[server] ⚠️ ADVERTENCIA: build/index.html no encontrado en:', indexPath);
+    return res.status(500).json({ 
+      error: 'Aplicación no compilada correctamente',
+      message: 'Por favor ejecuta: npm run build'
+    });
+  }
+  
+  res.sendFile(indexPath);
 });
 
 // ============ INICIAR SERVIDOR ============
@@ -1499,7 +2573,7 @@ function gracefulShutdown(signal) {
 
   // 2. Cerrar todas las conexiones WebSocket INMEDIATAMENTE
   console.log('🔌 Cerrando conexiones WebSocket...');
-  if (wss) {
+  if (typeof wss !== 'undefined' && wss) {
     const clientCount = wss.clients.size;
     console.log(`📊 Forzando cierre de ${clientCount} conexiones WebSocket...`);
     
@@ -1521,7 +2595,7 @@ function gracefulShutdown(signal) {
 
   // 3. Cerrar conexión de Gazepoint con limpieza completa
   console.log('👁️  Cerrando conexión Gazepoint...');
-  if (gazepointClient) {
+  if (typeof gazepointClient !== 'undefined' && gazepointClient) {
     try {
       gazepointClient.removeAllListeners(); // Remover todos los event listeners
       gazepointClient.destroy();
@@ -1587,13 +2661,13 @@ function gracefulShutdown(signal) {
   setTimeout(() => {
     console.log('✅ Proceso finalizado correctamente');
     process.exit(0);
-  }, 500); // Reducido a 500ms
+  }, 100); // Reducido a 100ms
   
-  // Terminación forzada más rápida
+  // Terminación forzada rápida
   setTimeout(() => {
     console.log('⚠️  Terminación forzada activada');
-    process.kill(process.pid, 'SIGKILL');
-  }, 2000); // Reducido a 2 segundos
+    process.exit(1);
+  }, 500); // Reducido a 500ms
 }
 
 // Capturar señales de cierre

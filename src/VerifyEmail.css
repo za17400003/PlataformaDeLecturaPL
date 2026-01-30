@@ -18,6 +18,204 @@
   width: 100%;
 }
 
+/* Contenedores generales para verificación y recuperación */
+.verify-container,
+.verify-card-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  font-family: 'Comic Neue', cursive;
+  padding: 1rem;
+  position: relative;
+}
+
+/* Botones de navegación */
+.back-button,
+.secondary-button {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  padding: 0.6rem 1.2rem;
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #333;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: 'Comic Neue', cursive;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.back-button:hover,
+.secondary-button:hover {
+  background-color: #f0f0f0;
+  border-color: #999;
+  transform: translateY(-2px);
+}
+
+.back-button:active,
+.secondary-button:active {
+  transform: translateY(0);
+}
+
+/* Tarjeta de verificación/recuperación */
+.verify-card {
+  background: white;
+  border-radius: 20px;
+  padding: 3rem 2rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 500px;
+  width: 100%;
+  margin-top: 3rem;
+  animation: slideUp 0.4s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.verify-card h2 {
+  color: #667eea;
+  font-size: 1.8rem;
+  margin: 0 0 1rem 0;
+  text-align: center;
+}
+
+.verify-card p {
+  color: #666;
+  font-size: 1rem;
+  text-align: center;
+  margin: 0.5rem 0;
+}
+
+.verify-card.success {
+  border-left: 5px solid #2e7d32;
+}
+
+.verify-card.success h2 {
+  color: #2e7d32;
+}
+
+.verify-card.error {
+  border-left: 5px solid #d32f2f;
+}
+
+.verify-card.error h2 {
+  color: #d32f2f;
+}
+
+/* Formularios */
+.verify-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.verify-card input,
+.verify-card textarea {
+  padding: 0.8rem 1rem;
+  border: 2px solid #ddd;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-family: 'Comic Neue', cursive;
+  transition: all 0.3s ease;
+}
+
+.verify-card input:focus,
+.verify-card textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 8px rgba(102, 126, 234, 0.3);
+}
+
+.verify-card input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Botones */
+.verify-card button[type="submit"],
+.verify-card button:not(.back-button):not(.secondary-button) {
+  padding: 0.8rem 1.5rem;
+  background-color: #667eea;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: bold;
+  font-family: 'Comic Neue', cursive;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.verify-card button[type="submit"]:hover:not(:disabled),
+.verify-card button:not(.back-button):not(.secondary-button):hover:not(:disabled) {
+  background-color: #764ba2;
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+  transform: translateY(-2px);
+}
+
+.verify-card button[type="submit"]:active:not(:disabled),
+.verify-card button:not(.back-button):not(.secondary-button):active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.verify-card button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Mensajes de error */
+.error-message {
+  color: #d32f2f;
+  background-color: #ffebee;
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 4px solid #d32f2f;
+  margin: 1rem 0 0 0;
+  font-size: 0.95rem;
+}
+
+.success-message {
+  color: #2e7d32;
+  background-color: #e8f5e9;
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 4px solid #2e7d32;
+  margin: 1rem 0 0 0;
+  font-size: 0.95rem;
+}
+
+.info-message {
+  color: #1976d2;
+  background-color: #e3f2fd;
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 4px solid #1976d2;
+  margin: 1rem 0 0 0;
+  font-size: 0.95rem;
+}
+
+.countdown {
+  color: #667eea;
+  font-weight: bold;
+  font-size: 1.1rem;
+  margin: 1rem 0 0 0;
+}
+
 .verify-state {
   display: flex;
   flex-direction: column;
@@ -179,13 +377,15 @@
 
 /* Responsive */
 @media (max-width: 600px) {
-  .VerifyEmail-content {
+  .VerifyEmail-content,
+  .verify-card {
     padding: 2rem 1.5rem;
   }
 
   .verify-state.verificando h1,
   .verify-state.exito h1,
-  .verify-state.error h1 {
+  .verify-state.error h1,
+  .verify-card h2 {
     font-size: 1.5rem;
   }
 
@@ -195,4 +395,12 @@
     height: 80px;
     font-size: 2.5rem;
   }
+
+  .back-button {
+    top: 0.5rem;
+    left: 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+  }
 }
+

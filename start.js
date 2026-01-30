@@ -6,15 +6,15 @@ const path = require('path');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 
-console.log('🚀 Iniciando Asistente de Lectura ADL...\n');
+console.log('[INICIO] Iniciando Asistente de Lectura PL...\n');
 
 // ========== SISTEMA DE INSTANCIA ÚNICA ==========
-const PID_FILE = path.join(__dirname, '.adl.pid');
-const LOCK_FILE = path.join(__dirname, '.adl.lock');
+const PID_FILE = path.join(__dirname, '.PL.pid');
+const LOCK_FILE = path.join(__dirname, '.PL.lock');
 
 // Función ÓPTIMA para eliminar cualquier instancia anterior
 async function ensureSingleInstance() {
-  console.log('� Verificando instancia única...');
+  console.log('[SISTEMA] Verificando instancia única...');
   
   // 1. Eliminar archivos de lock anteriores
   try {
@@ -22,7 +22,7 @@ async function ensureSingleInstance() {
     if (fs.existsSync(LOCK_FILE)) fs.unlinkSync(LOCK_FILE);
   } catch (e) {}
   
-  // 2. Eliminar TODOS los procesos Node.js relacionados con ADL (excepto el actual)
+  // 2. Eliminar TODOS los procesos Node.js relacionados con PL (excepto el actual)
   try {
     const { stdout } = await execAsync('tasklist /FI "IMAGENAME eq node.exe" /FO CSV');
     const lines = stdout.split('\n').slice(1);
@@ -37,10 +37,10 @@ async function ensureSingleInstance() {
           try {
             const { stdout: cmdline } = await execAsync(`wmic process where ProcessId=${pid} get CommandLine /value`);
             
-            if (cmdline.toLowerCase().includes('adl') || 
+            if (cmdline.toLowerCase().includes('PL') || 
                 cmdline.includes('server.js') || 
                 cmdline.includes('start.js')) {
-              console.log(`🛑 Eliminando instancia anterior PID: ${pid}`);
+              console.log(`[LIMPIAR] Eliminando instancia anterior PID: ${pid}`);
               await execAsync(`taskkill /F /PID ${pid}`);
             }
           } catch (e) {}
@@ -56,12 +56,12 @@ async function ensureSingleInstance() {
   fs.writeFileSync(PID_FILE, process.pid.toString());
   fs.writeFileSync(LOCK_FILE, new Date().toISOString());
   
-  console.log('✅ Instancia única garantizada');
+  console.log('[OK] Instancia única garantizada');
 }
 
 // Función ÓPTIMA para limpiar puerto 3000
 async function forcePortCleanup() {
-  console.log('🔧 Limpieza ÓPTIMA del puerto 3000...');
+  console.log('[PUERTO] Limpieza ÓPTIMA del puerto 3000...');
   
   try {
     const { stdout } = await execAsync('netstat -ano | findstr :3000');
@@ -82,7 +82,7 @@ async function forcePortCleanup() {
       for (const pid of pids) {
         try {
           await execAsync(`taskkill /F /PID ${pid}`);
-          console.log(`✅ Proceso ${pid} eliminado`);
+          console.log(`[OK] Proceso ${pid} eliminado`);
         } catch (e) {}
       }
       
@@ -90,7 +90,7 @@ async function forcePortCleanup() {
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
   } catch (e) {
-    console.log('✅ Puerto 3000 libre');
+    console.log('[OK] Puerto 3000 libre');
   }
 }
 
@@ -100,24 +100,29 @@ const needsBuild = checkIfBuildNeeded();
 
 if (!buildExists || needsBuild) {
   if (!buildExists) {
-    console.log('📦 Build no encontrado. Ejecutando npm run build...');
+    console.log('[BUILD] Build no encontrado. Ejecutando npm run build...');
   } else {
-    console.log('🔄 Código actualizado detectado. Reconstruyendo...');
+    console.log('[REBUILD] Código actualizado detectado. Reconstruyendo...');
   }
   
-  const buildProcess = spawn('npm', ['run', 'build'], { stdio: 'inherit' });
+  const isWindows = process.platform === 'win32';
+  const npmCmd = isWindows ? 'npm.cmd' : 'npm';
+  const buildProcess = spawn(npmCmd, ['run', 'build'], { 
+    stdio: 'inherit',
+    shell: true
+  });
   
   buildProcess.on('close', (code) => {
     if (code === 0) {
-      console.log('✅ Build completado exitosamente\n');
+      console.log('[OK] Build completado exitosamente\n');
       startServer();
     } else {
-      console.error('❌ Error en el build');
-      process.exit(1);
+      console.warn('[WARN] Error en el build, pero iniciando servidor de todas formas...\n');
+      startServer();
     }
   });
 } else {
-  console.log('✅ Build actualizado encontrado\n');
+  console.log('[OK] Build actualizado encontrado\n');
   startServer();
 }
 
@@ -139,29 +144,54 @@ function checkIfBuildNeeded() {
 }
 
 function startServer() {
-  console.log('🌐 Iniciando servidor unificado en puerto 3000...');
+  console.log('[RED] Iniciando servidores unificados...');
+  console.log('   [NODE] Node.js en puerto 3000\n');
+  console.log('   ⚠️  [FLASK] Desactivado por ahora (se puede activar después)\n');
   
   // Garantizar instancia única antes de iniciar
   ensureSingleInstance().then(() => {
     // Iniciar con garbage collection habilitado
-    const server = spawn('node', ['--expose-gc', 'server.js'], {
+    const nodeServer = spawn('node', ['--expose-gc', 'server.js'], {
       stdio: 'inherit',
       env: { ...process.env, NODE_ENV: 'production' }
     });
 
+    // ⚠️ FLASK COMENTADO - Se puede activar más tarde si es necesario
+    // const flaskServer = spawn('py', ['-3.10', path.join(__dirname, 'server', 'app.py')], {
+    //   stdio: 'inherit',
+    //   env: { ...process.env, FLASK_ENV: 'production' }
+    // });
+    const flaskServer = null;
+
     // Variable para evitar múltiples intentos de cierre
     let isShuttingDown = false;
 
-    server.on('close', (code) => {
+    nodeServer.on('close', (code) => {
       if (isShuttingDown) return;
-      console.log(`\n🛑 Servidor cerrado con código ${code}`);
-      cleanupLockFiles();
+      console.log(`\n[STOP] Servidor Node.js cerrado con código ${code}`);
+      gracefulShutdown('NODE_CLOSED');
     });
 
-    server.on('error', (error) => {
-      console.error('❌ Error en el servidor:', error);
+    // ⚠️ Flask listeners comentados - Se puede reactivar después si es necesario
+    // if (flaskServer) {
+    //   flaskServer.on('close', (code) => {
+    //     if (isShuttingDown) return;
+    //     console.log(`\n[STOP] Servidor Flask cerrado con código ${code}`);
+    //     gracefulShutdown('FLASK_CLOSED');
+    //   });
+    //
+    //   flaskServer.on('error', (error) => {
+    //     console.error('[ERROR] Error en Flask:', error);
+    //     if (!isShuttingDown) {
+    //       gracefulShutdown('FLASK_ERROR');
+    //     }
+    //   });
+    // }
+
+    nodeServer.on('error', (error) => {
+      console.error('[ERROR] Error en Node.js:', error);
       if (!isShuttingDown) {
-        gracefulShutdown();
+        gracefulShutdown('NODE_ERROR');
       }
     });
 
@@ -170,21 +200,30 @@ function startServer() {
       if (isShuttingDown) return;
       isShuttingDown = true;
       
-      console.log(`\n👋 Cerrando servidor... (señal: ${signal})`);
+      console.log(`\n[BYE] Cerrando servidores... (señal: ${signal})`);
       
-      if (server && !server.killed) {
-        // Terminar inmediatamente (más agresivo)
-        server.kill('SIGKILL');
+      // Terminar ambos servidores con SIGTERM primero (más limpio)
+      if (nodeServer && !nodeServer.killed) {
+        console.log('[SHUTDOWN] Enviando SIGTERM a Node.js...');
+        nodeServer.kill('SIGTERM');
+      }
+      if (flaskServer && !flaskServer.killed) {
+        console.log('[SHUTDOWN] Enviando SIGTERM a Flask...');
+        flaskServer.kill('SIGTERM');
       }
       
       // Limpiar archivos de lock
       cleanupLockFiles();
       
-      // Salir inmediatamente
-      setTimeout(() => {
-        console.log('✅ Proceso principal finalizado');
+      // Esperar a que los procesos se cierren, pero no bloquear
+      if (nodeServer) {
+        nodeServer.once('exit', () => {
+          console.log('[OK] Node.js cerrado correctamente');
+          process.exit(0);
+        });
+      } else {
         process.exit(0);
-      }, 1000);
+      }
     }
 
     // Función para limpiar archivos de lock
@@ -214,9 +253,9 @@ function startServer() {
       gracefulShutdown('UNHANDLED_REJECTION');
     });
 
-    console.log('🛡️  Sistema de monitoreo y limpieza configurado');
+    console.log('[SHIELD] Sistema de monitoreo y limpieza configurado');
   }).catch((error) => {
-    console.error('❌ Error garantizando instancia única:', error);
+    console.error('[ERROR] Error garantizando instancia única:', error);
     process.exit(1);
   });
 }

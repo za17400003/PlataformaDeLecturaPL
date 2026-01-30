@@ -1,7 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './index.css';
 import App from './App';
+import RecuperarContrasena from './RecuperarContrasena';
 import reportWebVitals from './reportWebVitals';
 // Early global suppression for ResizeObserver loop errors to avoid create-react-app overlay spam
 try {
@@ -33,7 +35,12 @@ try {
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <Router>
+      <Routes>
+        <Route path="/" element={<App />} />
+        <Route path="/recuperar-contrasena" element={<RecuperarContrasena />} />
+      </Routes>
+    </Router>
   </React.StrictMode>
 );
 

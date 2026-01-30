@@ -19,8 +19,9 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
-// Crear tabla de usuarios
+// PASO 1: Crear tablas base (users, reading_progress, etc)
 db.serialize(() => {
+  // Tabla de usuarios
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,13 +35,9 @@ db.serialize(() => {
       preferences TEXT DEFAULT '{"fontSize": 100, "theme": "light", "font": "original", "lineHeight": 1.45, "brightness": 1.0}',
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     )
-  `, (err) => {
-    if (err) {
-      console.error('❌ Error al crear tabla users:', err.message);
-    }
-  });
+  `);
 
-  // Crear tabla de progreso de lectura
+  // Tabla de progreso de lectura
   db.run(`
     CREATE TABLE IF NOT EXISTS reading_progress (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,97 +50,210 @@ db.serialize(() => {
       FOREIGN KEY (userId) REFERENCES users(id),
       UNIQUE(userId, bookFile)
     )
-  `, (err) => {
-    if (err) {
-      console.error('❌ Error al crear tabla reading_progress:', err.message);
-    }
-  });
+  `);
 
-  // Crear índices para optimizar queries
-  db.run('CREATE INDEX IF NOT EXISTS idx_reading_progress_userId ON reading_progress(userId)', (err) => {
-    if (err) {
-      console.error('⚠️ Error al crear índice userId:', err.message);
-    } else {
-      console.log('✅ Índice idx_reading_progress_userId creado');
-    }
-  });
+  // Crear índices
+  db.run('CREATE INDEX IF NOT EXISTS idx_reading_progress_userId ON reading_progress(userId)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_reading_progress_bookFile ON reading_progress(bookFile)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_reading_progress_userId_bookFile ON reading_progress(userId, bookFile)');
 
-  db.run('CREATE INDEX IF NOT EXISTS idx_reading_progress_bookFile ON reading_progress(bookFile)', (err) => {
-    if (err) {
-      console.error('⚠️ Error al crear índice bookFile:', err.message);
-    } else {
-      console.log('✅ Índice idx_reading_progress_bookFile creado');
-    }
-  });
-
-  db.run('CREATE INDEX IF NOT EXISTS idx_reading_progress_userId_bookFile ON reading_progress(userId, bookFile)', (err) => {
-    if (err) {
-      console.error('⚠️ Error al crear índice userId_bookFile:', err.message);
-    } else {
-      console.log('✅ Índice idx_reading_progress_userId_bookFile creado');
-    }
-  });
-
-  // Tabla de experimentos
+  // PASO 2: Crear tablas de experimentos (en orden correcto de dependencias)
+  
+  // experiments depende de users
   db.run(`
     CREATE TABLE IF NOT EXISTS experiments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER NOT NULL,
-      name TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      name VARCHAR(255) NOT NULL,
       description TEXT,
-      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      UNIQUE(userId, name)
+      version_number INTEGER DEFAULT 1,
+      is_template BOOLEAN DEFAULT 0,
+      config TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      deleted_at DATETIME,
+      deleted_by INTEGER,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (deleted_by) REFERENCES users(id)
     )
-  `, (err) => {
-    if (err) {
-      console.error('❌ Error al crear tabla experiments:', err.message);
-    }
-  });
+  `);
 
-  // Tabla de bloques de lectura
+  db.run('CREATE INDEX IF NOT EXISTS idx_experiments_user_active ON experiments(user_id, deleted_at, created_at DESC)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_experiments_name ON experiments(name, deleted_at)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_experiments_deleted ON experiments(deleted_at)');
+
+  // experiment_blocks depende de experiments
   db.run(`
-    CREATE TABLE IF NOT EXISTS reading_blocks (
+    CREATE TABLE IF NOT EXISTS experiment_blocks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      experimentId INTEGER NOT NULL,
-      blockNumber INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      duration INTEGER NOT NULL,
-      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (experimentId) REFERENCES experiments(id) ON DELETE CASCADE,
-      UNIQUE(experimentId, blockNumber)
+      experiment_id INTEGER NOT NULL,
+      block_number INTEGER NOT NULL,
+      name VARCHAR(255),
+      duration_minutes DECIMAL(5,2),
+      book_id INTEGER,
+      page_number INTEGER,
+      config TEXT,
+      order_index INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (experiment_id) REFERENCES experiments(id) ON DELETE CASCADE,
+      FOREIGN KEY (book_id) REFERENCES books(id)
     )
-  `, (err) => {
-    if (err) {
-      console.error('❌ Error al crear tabla reading_blocks:', err.message);
-    }
-  });
+  `);
 
-  // Tabla de configuración de bloques
+  db.run('CREATE INDEX IF NOT EXISTS idx_experiment_blocks_exp_block ON experiment_blocks(experiment_id, block_number)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_experiment_blocks_exp_order ON experiment_blocks(experiment_id, order_index)');
+
+  // experiment_runs depende de experiments
   db.run(`
-    CREATE TABLE IF NOT EXISTS block_stimuli_config (
+    CREATE TABLE IF NOT EXISTS experiment_runs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      blockId INTEGER NOT NULL UNIQUE,
-      vibrationEnabled INTEGER DEFAULT 0,
-      auditoryEnabled INTEGER DEFAULT 0,
-      visualEnabled INTEGER DEFAULT 0,
-      extraStimuli TEXT,
-      randomFrequency REAL NOT NULL DEFAULT 1.0,
-      frequencyCross INTEGER DEFAULT 1,
-      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (blockId) REFERENCES reading_blocks(id) ON DELETE CASCADE
+      experiment_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      session_id VARCHAR(100) NOT NULL UNIQUE,
+      status VARCHAR(50) DEFAULT 'pending',
+      started_at DATETIME,
+      completed_at DATETIME,
+      duration_seconds INTEGER,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (experiment_id) REFERENCES experiments(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id)
     )
-  `, (err) => {
-    if (err) {
-      console.error('❌ Error al crear tabla block_stimuli_config:', err.message);
+  `);
+
+  // experiment_run_blocks depende de experiment_runs
+  db.run(`
+    CREATE TABLE IF NOT EXISTS experiment_run_blocks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id INTEGER NOT NULL,
+      block_id VARCHAR(100),
+      block_number INTEGER,
+      book_id VARCHAR(255),
+      page_number INTEGER,
+      status VARCHAR(50) DEFAULT 'pending',
+      started_at DATETIME,
+      completed_at DATETIME,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (run_id) REFERENCES experiment_runs(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_experiment_run_blocks_run ON experiment_run_blocks(run_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_experiment_run_blocks_block ON experiment_run_blocks(run_id, block_number)');
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_experiment_runs_exp_user ON experiment_runs(experiment_id, user_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_experiment_runs_session ON experiment_runs(session_id)');
+
+  // run_assets depende de experiment_runs
+  db.run(`
+    CREATE TABLE IF NOT EXISTS run_assets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id INTEGER NOT NULL,
+      asset_type VARCHAR(50),
+      asset_path VARCHAR(500),
+      block_number INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (run_id) REFERENCES experiment_runs(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_run_assets_run ON run_assets(run_id)');
+
+  // run_events depende de experiment_runs
+  db.run(`
+    CREATE TABLE IF NOT EXISTS run_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id INTEGER NOT NULL,
+      block_number INTEGER,
+      event_type VARCHAR(100),
+      event_data TEXT,
+      timestamp_ms INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (run_id) REFERENCES experiment_runs(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_run_events_block ON run_events(block_number)');
+
+  // gaze_samples depende de experiment_runs
+  db.run(`
+    CREATE TABLE IF NOT EXISTS gaze_samples (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id INTEGER NOT NULL,
+      timestamp_ms INTEGER,
+      x_px INTEGER,
+      y_px INTEGER,
+      confidence REAL,
+      block_number INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (run_id) REFERENCES experiment_runs(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_gaze_samples_run ON gaze_samples(run_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_gaze_samples_timestamp ON gaze_samples(run_id, timestamp_ms)');
+
+  // mind_wandering_events depende de experiment_runs
+  db.run(`
+    CREATE TABLE IF NOT EXISTS mind_wandering_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id INTEGER NOT NULL,
+      block_number INTEGER,
+      event_timestamp_ms INTEGER,
+      duration_ms INTEGER,
+      confidence REAL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (run_id) REFERENCES experiment_runs(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_mind_wandering_run ON mind_wandering_events(run_id)');
+
+  // block_summaries depende de experiment_runs
+  db.run(`
+    CREATE TABLE IF NOT EXISTS block_summaries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id INTEGER NOT NULL,
+      block_number INTEGER,
+      total_samples INTEGER,
+      avg_x REAL,
+      avg_y REAL,
+      avg_confidence REAL,
+      mind_wandering_count INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (run_id) REFERENCES experiment_runs(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_block_summaries_run ON block_summaries(run_id)');
+
+  // audit_log para seguimiento de cambios
+  db.run(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      table_name VARCHAR(100),
+      action VARCHAR(50),
+      record_id INTEGER,
+      changes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_audit_log_table ON audit_log(table_name)');
+
+  // Escribir lock file después de que todo se ejecute
+  setTimeout(() => {
+    const lockFile = path.join(__dirname, '.migrations_completed');
+    if (!fs.existsSync(lockFile)) {
+      fs.writeFileSync(lockFile, 'completed', 'utf-8');
+      console.log('✅ Schema completamente inicializado y lock file creado');
     }
-  });
-
-  // Crear índices para experimentos (no mostrar logs innecesarios)
-  db.run('CREATE INDEX IF NOT EXISTS idx_experiments_userId ON experiments(userId)');
-
-  db.run('CREATE INDEX IF NOT EXISTS idx_reading_blocks_experimentId ON reading_blocks(experimentId)');
+  }, 500);
 });
 
 module.exports = db;

@@ -33,8 +33,13 @@ export default function Lector(props) {
     blockDuration = 300,
     onBlockComplete,
     onDataCapture,
+    onReady,
     bookId,
-    initialPage = 1
+    initialPage = 1,
+    currentRunId = null,
+    shouldStart = false,  // Nueva prop: indica cuándo el experimento debe comenzar
+    onPause = null,       // Callback cuando el experimento se pausa
+    onResume = null       // Callback cuando el experimento se reanuda
   } = props;
   
   // ============ REFERENCIAS ============
@@ -79,6 +84,9 @@ export default function Lector(props) {
   const [timerStarted, setTimerStarted] = useState(false);
   const experimentTimerRef = useRef(null);
   const experimentTimeoutRef = useRef(null);
+  
+  // ============ ESTADOS DE PAUSE/ABORT EN EXPERIMENTO ============
+  const [isPaused, setIsPaused] = useState(false);
   
   // ============ PREFERENCIAS DE LECTURA ============
   const [prefs, setPrefs] = useState(
@@ -302,6 +310,21 @@ export default function Lector(props) {
       img {
         max-width: 100% !important;
         height: auto !important;
+        width: auto !important;
+        display: block !important;
+        margin: 0 auto !important;
+        object-fit: contain !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        image-rendering: crisp-edges !important;
+        backface-visibility: hidden !important;
+        -webkit-backface-visibility: hidden !important;
+        transform: translateZ(0) !important;
+        -webkit-transform: translateZ(0) !important;
+      }
+      svg {
+        max-width: 100% !important;
+        height: auto !important;
+        width: 100% !important;
       }
     `;
     
@@ -337,7 +360,11 @@ export default function Lector(props) {
               }
             }
           } catch (e) {
-            console.log('[lector] No se pudo acceder al iframe:', e);
+            // Es normal que algunos iframes (about:srcdoc) no sean accesibles por CORS
+            // Solo loguear si es un error inesperado diferente a acceso denegado
+            if (!e.message.includes('Blocked a frame with origin') && process.env.REACT_APP_DEBUG === 'true') {
+              console.warn('[lector] ⚠️ No se pudo acceder al iframe:', e.message);
+            }
           }
         });
       });
@@ -388,7 +415,15 @@ export default function Lector(props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     console.log('[Lector] useEffect de inicialización:', { archivo, experimentMode, bookId, initialPage });
+    
+    // En modo experimento sin archivo (bloque sin libro), marcar como ready igual
     if (!archivo) {
+      if (experimentMode) {
+        console.log('[Lector] ✅ Modo experimento sin archivo - marcando como ready');
+        setReady(true);
+        setIsLoading(false);
+        return;
+      }
       console.warn('[Lector] No hay archivo especificado');
       return;
     }
@@ -401,7 +436,18 @@ export default function Lector(props) {
     const init = async () => {
       try {
         // Construir URL válida para el libro
-        const bookUrl = archivo.startsWith('http') ? archivo : `http://localhost:3000${archivo}`;
+        // Si viene como /public/libros/nombre.epub, convertir a /api/epub/nombre.epub
+        let bookUrl = archivo;
+        
+        if (archivo.includes('/libros/')) {
+          const filename = archivo.split('/').pop();
+          const encodedFilename = encodeURIComponent(filename);
+          bookUrl = `http://localhost:3000/api/epub/${encodedFilename}`;
+          console.log('[Lector] Usando endpoint CORS:', bookUrl);
+        } else if (!archivo.startsWith('http')) {
+          bookUrl = `http://localhost:3000${archivo}`;
+        }
+        
         console.log('[Lector] Cargando libro desde:', bookUrl);
         const book = ePub(bookUrl);
         bookRef.current = book;
@@ -463,7 +509,9 @@ export default function Lector(props) {
           width: '100%',
           height: '100%',
           flow: 'paginated',
-          spread: 'none'        // Una sola columna por página
+          spread: 'none',        // Una sola columna por página
+          allowScriptedContent: true,
+          snap: true             // Asegurar que cada página está bien alineada
         });
         renditionRef.current = rendition;
 
@@ -502,8 +550,12 @@ export default function Lector(props) {
                   const percentage = book.locations.percentageFromCfi(cfi);
                   pageNumber = Math.floor(percentage * totalPagesCalc) + 1;
                 }
+                // Si no tiene href, pageNumber queda null (es normal)
               } catch (e) {
-                console.log('[lector] No se pudo calcular página para:', item.label);
+                // Error calculando CFI, es silencioso - algunos items no son calculables
+                if (process.env.REACT_APP_DEBUG === 'true') {
+                  console.warn('[lector] ⚠️ No se pudo calcular página para:', item.label, e.message);
+                }
               }
               return { ...item, page: pageNumber };
             })
@@ -514,6 +566,58 @@ export default function Lector(props) {
         console.log('[lector] Mostrando primera página...');
         await rendition.display();
         console.log('[lector] Primera página mostrada');
+        
+        // -------- HOOK PARA RESOLVER RUTAS DE IMÁGENES --------
+        // Interceptar y corregir las rutas de las imágenes dentro del EPUB
+        // Usar el hook 'content' que se ejecuta después de que el contenido se carga en el iframe
+        if (rendition.hooks && rendition.hooks.content) {
+          rendition.hooks.content.register(async (contents) => {
+            console.log('[lector] Hook content ejecutado, resolviendo imágenes desde EPUB');
+            try {
+              // El contenido está en el iframe, acceder a las imágenes
+              const images = contents.document.querySelectorAll('img');
+              console.log('[lector] Encontradas', images.length, 'imágenes para procesar');
+              
+              images.forEach((img, idx) => {
+                const originalSrc = img.getAttribute('src');
+                if (originalSrc) {
+                  console.log('[lector] Imagen', idx, ': src =', originalSrc);
+                  
+                  // Si es un blob URL o data URL, está bien
+                  if (originalSrc.startsWith('blob:') || originalSrc.startsWith('data:')) {
+                    console.log('[lector] Imagen ya es blob/data URL, OK');
+                  } else {
+                    // Si es una ruta relativa o URL del servidor, necesita procesamiento
+                    // epubjs debería manejar esto automáticamente, pero a veces no lo hace
+                    console.warn('[lector] ⚠️ Imagen no es blob URL:', originalSrc);
+                  }
+                  
+                  // Aplicar estilos de optimización para que se vea correctamente
+                  img.style.maxWidth = '100%';
+                  img.style.height = 'auto';
+                  img.style.width = 'auto';
+                  img.style.display = 'block';
+                  img.style.margin = '0 auto';
+                  img.style.objectFit = 'contain';
+                  img.style.imageRendering = 'auto';
+                  
+                  // Agregar listeners para debug
+                  img.addEventListener('load', () => {
+                    console.log('[lector] ✓ Imagen cargada correctamente:', originalSrc);
+                  });
+                  img.addEventListener('error', () => {
+                    console.error('[lector] ✗ Error cargando imagen:', originalSrc);
+                    // Mostrar que hay error en el aspecto de la imagen
+                    img.style.border = '1px solid red';
+                    img.style.opacity = '0.5';
+                  });
+                }
+              });
+            } catch (e) {
+              console.error('[lector] Error en hook content:', e);
+            }
+          });
+        }
         
         // Ocultar spinner de carga
         setIsLoading(false);
@@ -546,29 +650,36 @@ export default function Lector(props) {
             
             console.log('[lector] 🔄 RELOCATED EVENT:', { cfi: cfi.substring(0, 30) });
             
-            // Intentar obtener porcentaje de varias formas
-            let pct = 0;
-            
-            // Opción 1: percentageFromCfi (método estándar de epubjs)
-            pct = book.locations.percentageFromCfi(cfi);
+            // Obtener porcentaje usando el método estándar de epubjs
+            let pct = book.locations.percentageFromCfi(cfi);
             console.log('[lector]   → percentageFromCfi():', (pct * 100).toFixed(1) + '%');
             
-            // Si aún es 0, intentar calcular manualmente desde locations
-            if (pct === 0 && book.locations.length() > 0) {
-              // Buscar el CFI en el array de locations
-              const locArray = book.locations._locations || [];
-              const index = locArray.indexOf(cfi);
-              if (index >= 0) {
-                pct = index / locArray.length;
-                console.log('[lector]   → calculado manualmente:', (pct * 100).toFixed(1) + '%');
+            // Si percentageFromCfi falló (retorna -1 o NaN), intentar alternativa
+            if (pct < 0 || isNaN(pct)) {
+              if (book.locations.length() > 0) {
+                // Alternativa: buscar posición del spine item actual
+                try {
+                  const currentSpine = book.spine.get(book.spine.current);
+                  if (currentSpine && currentSpine.href) {
+                    const spineIndex = book.spine.items.indexOf(currentSpine);
+                    const totalSpines = book.spine.items.length;
+                    // Estimar porcentaje basado en posición en spine
+                    pct = totalSpines > 0 ? spineIndex / totalSpines : 0;
+                    console.log('[lector]   → estimado por spine position:', (pct * 100).toFixed(1) + '%');
+                  }
+                } catch (e) {
+                  console.warn('[lector] ⚠️ No se pudo calcular porcentaje:', e.message);
+                  return;
+                }
               } else {
-                console.log('[lector]   ⚠️ CFI no encontrado en locations array');
+                console.warn('[lector] ⚠️ No hay locations para calcular porcentaje');
+                return;
               }
             }
             
-            // Si aún es 0, no actualizar nada
-            if (pct === 0) {
-              console.warn('[lector] ⚠️ Porcentaje es 0, no se actualiza progreso');
+            // Validar que el porcentaje sea razonable
+            if (pct < 0 || isNaN(pct)) {
+              console.warn('[lector] ⚠️ Porcentaje inválido, no se actualiza');
               return;
             }
             
@@ -576,11 +687,11 @@ export default function Lector(props) {
             const newProgress = Math.max(0, Math.min(100, pct * 100));
             setProgress(newProgress);
             
-            // Calcular página
+            // Calcular página (asegurar que no exceda totalPages)
             const { totalPages: totalPagesCalc } = pageCalcRef.current;
-            const pageNum = Math.max(1, Math.ceil(pct * totalPagesCalc));
-            
-            console.log('[lector] ✅ ACTUALIZADO - Página:', pageNum, '/', totalPagesCalc, '- Progreso:', newProgress.toFixed(1) + '%');
+            let pageNum = Math.max(1, Math.ceil(pct * totalPagesCalc));
+            // Validar que no exceda el total
+            pageNum = Math.min(pageNum, totalPagesCalc);
             
             // Guardar progreso ANTES de actualizar el state
             // Pasar los valores actuales explícitamente
@@ -606,6 +717,46 @@ export default function Lector(props) {
         rendition.on('rendered', () => {
           console.log('[lector] Página renderizada');
           applyPrefsToBook();
+          
+          // Optimizar imágenes después de renderizar
+          try {
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(iframe => {
+              try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc) {
+                  const images = iframeDoc.querySelectorAll('img');
+                  images.forEach(img => {
+                    // Asegurar que las imágenes se rendericen nítidamente
+                    img.style.imageRendering = 'crisp-edges';
+                    img.style.imageRendering = '-webkit-optimize-contrast';
+                    img.style.width = 'auto';
+                    img.style.maxWidth = '100%';
+                    img.style.height = 'auto';
+                    img.style.display = 'block';
+                    img.style.margin = '0 auto';
+                    // Forzar reflow para que los cambios de estilo se apliquen
+                    // eslint-disable-next-line no-unused-expressions
+                    img.offsetHeight; // trigger reflow
+                  });
+                  
+                  // Optimizar SVGs también
+                  const svgs = iframeDoc.querySelectorAll('svg');
+                  svgs.forEach(svg => {
+                    svg.style.maxWidth = '100%';
+                    svg.style.height = 'auto';
+                    svg.style.width = '100%';
+                  });
+                }
+              } catch (e) {
+                // CORS error, ignorar
+              }
+            });
+          } catch (e) {
+            if (process.env.REACT_APP_DEBUG === 'true') {
+              console.warn('[lector] Error optimizando imágenes:', e);
+            }
+          }
         });
 
         // Cargar progreso guardado después de que los eventos estén registrados
@@ -678,6 +829,25 @@ export default function Lector(props) {
     }
   }, [prefs, ready]);
 
+  // Callback cuando el Lector está listo (usado para precargar en modo experimento)
+  useEffect(() => {
+    if (ready && onReady) {
+      console.log('[lector] ✅ Libro listo y onReady callback disponible - Llamando...');
+      onReady();
+    } else {
+      console.log('[lector] ⏳ Esperando: ready=' + ready + ', onReady=' + !!onReady);
+    }
+  }, [ready, onReady]);
+
+  // Cuando initialPage cambia en modo experimento (p.ej. siguiente bloque del mismo libro)
+  // Si el libro ya está listo, cargar directamente la nueva página sin recargar el libro
+  useEffect(() => {
+    if (experimentMode && ready && initialPage && initialPage > 1) {
+      console.log('[lector] Cambiando a página inicial:', initialPage);
+      loadInitialPage(initialPage);
+    }
+  }, [initialPage, ready, experimentMode, loadInitialPage]);
+
   // Limpiar timer de bloques al desmontar componente
   useEffect(() => {
     return () => {
@@ -712,79 +882,160 @@ export default function Lector(props) {
   // Mantener refs para evitar listeners stale
   const readyRef = useRef(false);
   const timerStartedRef = useRef(false);
+  const isPausedRef = useRef(false);
   useEffect(() => { readyRef.current = ready; }, [ready]);
   useEffect(() => { timerStartedRef.current = timerStarted; }, [timerStarted]);
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+
+  // ============ ACTIVAR EXPERIMENTO CUANDO SE ABRE EL LECTOR ============
+  // Cuando ExperimentRunner indica que el experimento debe comenzar (shouldStart=true)
+  // se marca timerStarted=true para que los keyboard handlers funcionen
+  useEffect(() => {
+    if (experimentMode && shouldStart && ready && !timerStarted) {
+      console.log('\n=== 🟢 LECTOR ACTIVADO ===');
+      console.log('[lector] ⏱️ shouldStart=true recibido');
+      console.log('[lector] ready=true confirmado');
+      console.log('[lector] ✅ Marcando timerStarted=true');
+      console.log('[lector] 🎹 SPACEBAR, BACKSPACE, ESCAPE ahora activos');
+      setTimerStarted(true);
+      
+      // Iniciar el cronómetro del experimento
+      if (blockDuration && blockDuration > 0) {
+        console.log(`[lector] ⏱️ Iniciando cronómetro de ${blockDuration}s`);
+        setExperimentTimer(blockDuration);
+        
+        // Interval: actualizar cronómetro cada segundo
+        experimentTimerRef.current = setInterval(() => {
+          setExperimentTimer(prev => {
+            const newVal = prev - 1;
+            if (newVal <= 0) {
+              clearInterval(experimentTimerRef.current);
+              experimentTimerRef.current = null;
+              // Llamar callback cuando se acaba el tiempo
+              if (onBlockComplete) {
+                console.log('[lector] ✅ TIEMPO DE BLOQUE COMPLETADO');
+                onBlockComplete();
+              }
+            }
+            return Math.max(0, newVal);
+          });
+        }, 1000);
+      }
+    }
+  }, [experimentMode, shouldStart, ready, timerStarted, blockDuration, onBlockComplete]);
 
   // Listener para SPACEBAR en modo experimento - Global sin importar focus
   useEffect(() => {
     if (!experimentMode) return undefined;
 
+    // Manejador para ESPACIO: Página siguiente durante experimento
     const handleSpaceBar = (e) => {
       if (e.code !== 'Space' && e.key !== ' ') return;
+      
       const started = timerStartedRef.current;
       const isReady = readyRef.current;
-      console.log('[lector] SPACEBAR detectada - timerStarted:', started, 'ready:', isReady);
-      if (started || !isReady) return;
-
+      
+      console.log('[lector] 🔍 SPACEBAR PRESIONADO: started=' + started + ', isReady=' + isReady);
+      
+      // Solo avanzar página si el experimento está activo
+      if (!started || !isReady) {
+        console.log('[lector] ⚠️ SPACEBAR BLOQUEADO: timerStarted=' + started + ', ready=' + isReady);
+        return;
+      }
+      
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      console.log('[lector] SPACEBAR presionada - Iniciando cronómetro');
-      setTimerStarted(true);
-      timerStartedRef.current = true;
+      console.log('[lector] ✅ SPACEBAR OK - Avanzando página');
+      goNext();
+    };
+
+    // Manejador para BACKSPACE: Página anterior durante experimento
+    const handleBackspace = (e) => {
+      if (e.code !== 'Backspace') return;
       
-      // Capturar datos iniciales
-      if (onDataCapture) {
-        onDataCapture('block_start', {
-          blockDuration,
-          bookId,
-          initialPage,
-          timestamp: new Date().toISOString()
-        });
+      const started = timerStartedRef.current;
+      const isReady = readyRef.current;
+      
+      console.log('[lector] 🔍 BACKSPACE PRESIONADO: started=' + started + ', isReady=' + isReady);
+      
+      // Solo retroceder página si el experimento está activo
+      if (!started || !isReady) {
+        console.log('[lector] ⚠️ BACKSPACE ignorada: experimento no activo');
+        return;
       }
       
-      // Actualizar cronómetro cada segundo
-      experimentTimerRef.current = setInterval(() => {
-        setExperimentTimer(prev => {
-          if (prev <= 1) {
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      console.log('[lector] ✅ BACKSPACE procesada - Página anterior');
+      goPrev();
+    };
+
+    // Manejador para ESC: Pausa durante experimento
+    const handleEscape = async (e) => {
+      if (e.code !== 'Escape') return;
       
-      // Timer para completar bloque
-      const duration = blockDuration * 1000;
-      experimentTimeoutRef.current = setTimeout(() => {
-        console.log('[lector] MODO EXPERIMENTO: Bloque completado');
-        if (experimentTimerRef.current) {
-          clearInterval(experimentTimerRef.current);
-          experimentTimerRef.current = null;
-        }
-        if (onDataCapture) {
-          onDataCapture('block_end', {
-            timestamp: new Date().toISOString()
+      const started = timerStartedRef.current;
+      const isReady = readyRef.current;
+      
+      console.log('[lector] 🔍 ESCAPE EVENT: started=' + started + ', isReady=' + isReady + ', experimentMode=' + experimentMode);
+      
+      // Solo pausar si experimento está activo
+      if (!started || !isReady) {
+        console.log('[lector] ⚠️ ESCAPE ignorada: experimento no activo');
+        return;
+      }
+      
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      console.log('[lector] ✅ ESCAPE procesada - Pausando experimento');
+      
+      // Pausar experimento
+      try {
+        const token = localStorage.getItem('authToken');
+        const runId = currentRunId;
+        if (runId && token) {
+          const response = await fetch(`/api/experiment-runs/${runId}/pause`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` },
+            credentials: 'include'
           });
+          if (response.ok) {
+            console.log('[lector] ⏸ Experimento pausado por teclado');
+            // Actualizar estado local de pausa
+            setIsPaused(true);
+            // Llamar callback de pausa
+            if (onPause) {
+              console.log('[lector] Llamando callback onPause');
+              onPause();
+            }
+          }
         }
-        if (onBlockComplete) {
-          console.log('[lector] Llamando a onBlockComplete()');
-          onBlockComplete();
-        }
-      }, duration);
+      } catch (err) {
+        console.error('[lector] Error pausing experiment via keyboard:', err);
+      }
     };
 
     const cleanups = [];
     
-    // Listeners en captura TRUE para asegurar que se ejecute primero
-    window.addEventListener('keydown', handleSpaceBar, true);
-    document.addEventListener('keydown', handleSpaceBar, true);
-    document.body.addEventListener('keydown', handleSpaceBar, true);
-    document.documentElement.addEventListener('keydown', handleSpaceBar, true);
+    // Asegurar que el Lector siempre reciba events de teclado incluso sin focus
+    const lectorContainer = document.querySelector('.lector-container');
+    if (lectorContainer && experimentMode) {
+      lectorContainer.tabIndex = 0;
+      lectorContainer.focus();
+    }
     
+    // Listeners para teclas en captura TRUE
+    // Registrar solo en window para evitar duplicados
+    window.addEventListener('keydown', handleSpaceBar, true);
+    window.addEventListener('keydown', handleBackspace, true);
+    window.addEventListener('keydown', handleEscape, true);
+
     cleanups.push(() => window.removeEventListener('keydown', handleSpaceBar, true));
-    cleanups.push(() => document.removeEventListener('keydown', handleSpaceBar, true));
-    cleanups.push(() => document.body.removeEventListener('keydown', handleSpaceBar, true));
-    cleanups.push(() => document.documentElement.removeEventListener('keydown', handleSpaceBar, true));
+    cleanups.push(() => window.removeEventListener('keydown', handleBackspace, true));
+    cleanups.push(() => window.removeEventListener('keydown', handleEscape, true));
 
     // Intentar adjuntar a iframes de epub si es posible (pueden tener CORS)
     const attachToContents = () => {
@@ -823,11 +1074,56 @@ export default function Lector(props) {
         cleanups.push(() => renditionRef.current?.off?.('rendered', attachToContents));
       }
     } catch (_) {}
+    
+    // Listener para recuperar focus cuando se pierde (mantiene keyboard working)
+    const handleFocusRecovery = () => {
+      const lectorContainer = document.querySelector('.lector-container');
+      if (lectorContainer && experimentMode) {
+        lectorContainer.focus();
+      }
+    };
+    
+    if (experimentMode) {
+      window.addEventListener('click', handleFocusRecovery, true);
+      cleanups.push(() => window.removeEventListener('click', handleFocusRecovery, true));
+    }
 
     return () => {
       cleanups.forEach(fn => { try { fn(); } catch (_) {} });
     };
   }, [experimentMode, blockDuration, onBlockComplete, onDataCapture, bookId, initialPage]);
+
+  // ============ MODO LECTURA NORMAL: CONTROLES DE TECLADO ============
+  // En modo normal (no experimento): Flechas izq/der, ESPACIO para avanzar, BACKSPACE para retroceder
+  useEffect(() => {
+    if (experimentMode) return undefined; // En experimento, usar los otros handlers
+    
+    const handleKeyPressNormal = (e) => {
+      // Solo procesar si el Lector está listo
+      if (!ready) return;
+      
+      // Flechas derecha o ESPACIO: Siguiente página
+      if ((e.key === 'ArrowRight' || e.code === 'Space') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[lector] 🔍 FLECHA DERECHA/ESPACIO - Siguiente página');
+        goNext();
+        return;
+      }
+      
+      // Flecha izquierda o BACKSPACE: Página anterior
+      if ((e.key === 'ArrowLeft' || e.code === 'Backspace') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[lector] 🔍 FLECHA IZQUIERDA/BACKSPACE - Página anterior');
+        goPrev();
+        return;
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPressNormal, true);
+    return () => window.removeEventListener('keydown', handleKeyPressNormal, true);
+  }, [experimentMode, ready]);
 
   // ============ FUNCIONES DE NAVEGACIÓN ============
   
@@ -1032,8 +1328,115 @@ export default function Lector(props) {
     });
   };
 
+  // ============ HANDLERS PAUSE/RESUME/ABORT ============
+  const handlePause = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`/api/experiment-runs/${currentRunId}/pause`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include'
+      });
+      if (response.ok) {
+        setIsPaused(true);
+        console.log('[lector] ⏸ Experimento pausado');
+        // Notificar al componente padre sobre la pausa
+        if (onPause) {
+          console.log('[lector] Llamando callback onPause');
+          onPause();
+        }
+      }
+    } catch (err) {
+      console.error('[lector] Error pausing experiment:', err);
+    }
+  };
+
+  const handleResume = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`/api/experiment-runs/${currentRunId}/resume`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include'
+      });
+      if (response.ok) {
+        setIsPaused(false);
+        console.log('[lector] ▶ Experimento reanudado');
+        // Notificar al componente padre sobre la reanudación
+        if (onResume) {
+          console.log('[lector] Llamando callback onResume');
+          onResume();
+        }
+      }
+    } catch (err) {
+      console.error('[lector] Error resuming experiment:', err);
+    }
+  };
+
+  const handleAbort = async () => {
+    const password = window.prompt('¿Estás seguro? Esto abortará el experimento. Ingresa tu contraseña para continuar:');
+    if (password === null) return; // Usuario canceló
+    
+    if (!password.trim()) {
+      alert('Debes ingresar tu contraseña para abortar');
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('authToken');
+      
+      // Verificar contraseña
+      const verifyResponse = await fetch('/api/auth/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ password }),
+        credentials: 'include'
+      });
+      
+      if (!verifyResponse.ok) {
+        alert('Contraseña incorrecta');
+        return;
+      }
+      
+      // Abortar experimento
+      const response = await fetch(`/api/experiment-runs/${currentRunId}/cancel`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        console.log('[lector] ⛔ Experimento cancelado');
+        alert('Experimento cancelado correctamente');
+        onClose();
+      } else {
+        alert('Error al abortar el experimento');
+      }
+    } catch (err) {
+      console.error('[lector] Error aborting experiment:', err);
+      alert('Error al abortar el experimento');
+    }
+  };
+
+  // Manejador para cerrar guardando el progreso
+  const handleCloseLector = async () => {
+    // NO guardar progreso en modo experimento para evitar interferencia con el otro lector
+    if (!experimentMode) {
+      console.log('[lector] Guardando progreso antes de cerrar...');
+      try {
+        await saveReadingProgress();
+        console.log('[lector] Progreso guardado exitosamente');
+      } catch (e) {
+        console.error('[lector] Error guardando progreso final:', e);
+      }
+    } else {
+      console.log('[lector] Modo experimento: NO guardando progreso');
+    }
+    onClose();
+  };
+
   return (
-    <div className="Lector-overlay" onClick={experimentMode ? undefined : onClose}>
+    <div className="lector-container Lector-overlay" onClick={experimentMode ? undefined : handleCloseLector}>
       <div className="Lector-panel" onClick={(e) => e.stopPropagation()}>
         <header className="Lector-header">
           <div className="Lector-title">📖 {bookTitle}</div>
@@ -1056,7 +1459,7 @@ export default function Lector(props) {
                 </button>
                 <button
                   className="HeaderBtn close"
-                  onClick={onClose}
+                  onClick={handleCloseLector}
                   title="Cerrar"
                 >
                   ✕
@@ -1095,6 +1498,81 @@ export default function Lector(props) {
           {isLoading && <div className="Lector-loading">Cargando libro…</div>}
         </main>
 
+        {/* Botones de Pause/Resume/Abort en modo experimento */}
+        {experimentMode && currentRunId && (
+          <div style={{
+            display: 'flex',
+            gap: '0.5rem',
+            justifyContent: 'center',
+            padding: '0.5rem',
+            borderTop: '1px solid #ccc',
+            backgroundColor: '#f9f9f9',
+            zIndex: isPaused ? 1001 : 'auto',
+            position: 'relative'
+          }}>
+            {isPaused && (
+              <>
+                <button 
+                  onClick={handleResume}
+                  style={{
+                    padding: '0.4rem 0.8rem',
+                    fontSize: '0.75rem',
+                    backgroundColor: '#4CAF50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    flex: 1
+                  }}
+                  title="Continuar experimento (Presiona ESC para pausar de nuevo)"
+                >
+                  ▶ Continuar
+                </button>
+                <button 
+                  onClick={handleAbort}
+                  style={{
+                    padding: '0.4rem 0.8rem',
+                    fontSize: '0.75rem',
+                    backgroundColor: '#f44336',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    flex: 1
+                  }}
+                  title="Abortar experimento"
+                >
+                  ⛔ Abortar
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Opacidad cuando está pausado */}
+        {experimentMode && isPaused && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            pointerEvents: 'none',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontSize: '1.2rem',
+            fontWeight: 'bold'
+          }}>
+            ⏸ PAUSADO
+          </div>
+        )}
+
         <footer className="Lector-footer">
           <div className="Progress-info">
             <span>Página {currentPage} de {totalPages} ({progress.toFixed(1)}%)</span>
@@ -1110,9 +1588,9 @@ export default function Lector(props) {
           />
         </footer>
 
-        {/* Cronómetro visible en modo experimento */}
+        {/* Cronómetro oculto en modo experimento - funcionalidad intacta, solo visual */}
         {experimentMode && (
-          <div className={`experiment-timer-overlay ${experimentTimer <= 30 && timerStarted ? 'warning' : ''}`}>
+          <div className={`experiment-timer-overlay ${experimentTimer <= 30 && timerStarted ? 'warning' : ''}`} style={{ display: 'none' }}>
             <div className="experiment-timer-display">
               <span className="timer-icon">⏱️</span>
               <span className="timer-value">{formatTime(experimentTimer)}</span>

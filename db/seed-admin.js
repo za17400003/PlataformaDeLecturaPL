@@ -29,8 +29,8 @@ db.serialize(() => {
     // Crear usuario admin con contraseña "123"
     const hash = bcrypt.hashSync('123', 10);
     db.run(
-      'INSERT INTO users (username, password, isDeveloper) VALUES (?, ?, ?)',
-      ['admin', hash, 1],
+      'INSERT INTO users (username, email, password, isDeveloper, isVerified) VALUES (?, ?, ?, ?, ?)',
+      ['admin', 'admin@localhost.local', hash, 1, 1],
       (err) => {
         if (err) {
           console.error('❌ Error al crear usuario admin:', err.message);

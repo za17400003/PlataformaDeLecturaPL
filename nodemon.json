@@ -1,0 +1,11 @@
+{
+  "watch": ["server.js", "src/**", "server/**", "db/**", "services/**"],
+  "ignore": ["node_modules/**", "build/**", "*.sqlite", "*.db"],
+  "exec": "node server.js",
+  "ext": "js,json",
+  "delay": 500,
+  "verbose": true,
+  "env": {
+    "NODE_ENV": "development"
+  }
+}
