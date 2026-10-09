@@ -10,6 +10,7 @@
 
 # production
 /build
+/public/libros/*.epub
 
 # misc
 .DS_Store

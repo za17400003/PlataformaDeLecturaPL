@@ -44,39 +44,7 @@ export default function Lector(props) {
     };
   });
 
-  const updatePref = (patch) => {
-    const newPrefs = { ...prefs, ...patch };
-    setPrefs(newPrefs);
-    localStorage.setItem('readerPrefs', JSON.stringify(newPrefs));
-    applyPrefsToAll(newPrefs);
-  };
   const toggleSettings = () => setShowSettings(v => !v);
-
-  // Aplica las preferencias a todas las secciones del libro
-  const applyPrefsToAll = (newPrefs) => {
-    const rendition = renditionRef.current;
-    if (!rendition) return;
-    
-    // Aplicar a la sección actual y contenedor
-    applyPrefsToRendition(rendition, newPrefs);
-    if (viewerRef.current) {
-      viewerRef.current.style.filter = `brightness(${newPrefs.brightness})`;
-    }
-    
-    // Aplicar a todas las secciones cargadas
-    try {
-      const css = buildPrefsCss(newPrefs);
-      rendition.getContents().forEach(content => {
-        if (content.document && content.document.body) {
-          const style = content.document.createElement('style');
-          style.innerHTML = css;
-          content.document.head.appendChild(style);
-        }
-      });
-    } catch (e) {
-      console.warn('Error applying prefs to all sections:', e);
-    }
-  };
 
   // crea CSS con mayor especificidad para vencer estilos internos
   const buildPrefsCss = (p) => {
@@ -356,7 +324,7 @@ export default function Lector(props) {
       try { await rendition.resize && rendition.resize(); } catch (e) {}
       try {
         const loc = rendition.currentLocation && rendition.currentLocation();
-        const cfi = loc && (loc.start ? loc.start.cfi : loc.cfi) || null;
+        const cfi = (loc && (loc.start ? loc.start.cfi : loc.cfi)) || null;
         if (cfi) await rendition.display(cfi);
         else await rendition.display();
       } catch (e) {}

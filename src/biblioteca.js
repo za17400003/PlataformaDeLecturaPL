@@ -11,6 +11,8 @@ import Lector from './Lector'; // agregado: lector
 
 function Biblioteca() {
   const [libros, setLibros] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCatalogo, setErrorCatalogo] = useState(false);
   const [portadas, setPortadas] = useState([]);
   const [nubeActiva, setNubeActiva] = useState(null);
   const [deslizarDireccion, setDeslizarDireccion] = useState(null);
@@ -20,9 +22,19 @@ function Biblioteca() {
 
   useEffect(() => {
     fetch('http://localhost:3001/api/libros')
-      .then(res => res.json())
-      .then(data => setLibros(data))
-      .catch(err => console.error('Error al obtener libros:', err));
+      .then(res => {
+        if (!res.ok) throw new Error('No se pudo cargar el catalogo');
+        return res.json();
+      })
+      .then(data => {
+        if (!Array.isArray(data)) throw new Error('El catalogo no tiene un formato valido');
+        setLibros(data);
+      })
+      .catch(err => {
+        console.error('Error al obtener libros:', err);
+        setErrorCatalogo(true);
+      })
+      .finally(() => setCargando(false));
   }, []);
 
   useEffect(() => {
@@ -61,14 +73,6 @@ function Biblioteca() {
     paginaActual * librosPorPagina,
     (paginaActual + 1) * librosPorPagina
   );
-
-  const activarAnimacion = (direccion) => {
-    setNubeActiva(direccion);
-    setTimeout(() => {
-      setNubeActiva(null);
-      setDeslizarDireccion(null);
-    }, 1200);
-  };
 
   const avanzarPagina = () => {
     if ((paginaActual + 1) * librosPorPagina < portadas.length) {
@@ -117,6 +121,17 @@ function Biblioteca() {
         )}
 
         <div className="Nubes-blancas">
+          {!cargando && libros.length === 0 && (
+            <div className="Estado-vacio" role={errorCatalogo ? 'alert' : 'status'}>
+              <h3>{errorCatalogo ? 'No se pudo cargar la biblioteca' : 'Todavia no hay libros'}</h3>
+              <p>
+                {errorCatalogo
+                  ? 'Inicia el servidor local con npm run server y vuelve a intentarlo.'
+                  : 'Agrega archivos EPUB con licencia en public/libros para verlos aqui.'}
+              </p>
+            </div>
+          )}
+
           {/* Skeleton placeholders (same DOM structure que las nubes reales) */}
           {portadas.length === 0 && libros.length > 0 && (
             Array.from({ length: librosPorPagina }).map((_, i) => (

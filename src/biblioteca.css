@@ -357,3 +357,24 @@
 img {
   object-fit: contain;
 }
+
+.Estado-vacio {
+  grid-column: 1 / -1;
+  max-width: 560px;
+  padding: 2rem;
+  border: 1px solid rgba(14, 47, 51, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #0e2f33;
+  text-align: center;
+}
+
+.Estado-vacio h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+}
+
+.Estado-vacio p {
+  margin: 0;
+  line-height: 1.5;
+}

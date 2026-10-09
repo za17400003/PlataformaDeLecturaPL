@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import './App.css';
 
 import solAnimado from './assets/sol.png';
@@ -8,7 +8,6 @@ import Biblioteca from './biblioteca';
 function App() {
   const [usuario, setUsuario] = useState('');
   const [contrasena, setContrasena] = useState('');
-  const [modoDev, setModoDev] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState(false);
   const [mensajeBoton, setMensajeBoton] = useState('Iniciar sesión');
@@ -65,15 +64,6 @@ function App() {
           value={contrasena}
           onChange={(e) => setContrasena(e.target.value)}
         />
-
-        <label className="Checkbox">
-          <input
-            type="checkbox"
-            checked={modoDev}
-            onChange={() => setModoDev(!modoDev)}
-          />
-          MODO DESARROLLADOR
-        </label>
 
         <button
           className={`Boton-login ${error ? 'Boton-error' : ''}`}
